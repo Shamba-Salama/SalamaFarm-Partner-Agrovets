@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as InventoryRouteImport } from './routes/inventory'
+import { Route as MpesaRouteImport } from './routes/mpesa'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +29,44 @@ const InventoryRoute = InventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MpesaRoute = MpesaRouteImport.update({
+  id: '/mpesa',
+  path: '/mpesa',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/customers': typeof CustomersRoute
   '/inventory': typeof InventoryRoute
+  '/mpesa': typeof MpesaRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/customers': typeof CustomersRoute
   '/inventory': typeof InventoryRoute
+  '/mpesa': typeof MpesaRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/customers': typeof CustomersRoute
   '/inventory': typeof InventoryRoute
+  '/mpesa': typeof MpesaRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/customers' | '/inventory'
+  fullPaths: '/' | '/customers' | '/inventory' | '/mpesa'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/customers' | '/inventory'
-  id: '__root__' | '/' | '/customers' | '/inventory'
+  to: '/' | '/customers' | '/inventory' | '/mpesa'
+  id: '__root__' | '/' | '/customers' | '/inventory' | '/mpesa'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CustomersRoute: typeof CustomersRoute
   InventoryRoute: typeof InventoryRoute
+  MpesaRoute: typeof MpesaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +92,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mpesa': {
+      id: '/mpesa'
+      path: '/mpesa'
+      fullPath: '/mpesa'
+      preLoaderRoute: typeof MpesaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CustomersRoute: CustomersRoute,
   InventoryRoute: InventoryRoute,
+  MpesaRoute: MpesaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
