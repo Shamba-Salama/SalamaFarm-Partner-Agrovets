@@ -41,9 +41,9 @@ export const Route = createFileRoute("/")({
 function DashboardPage() {
   const { products, orders, transactions, profile, setProfile } = usePortal();
 
-  const revenue = transactions
-    .filter((t) => t.pickup !== "Unmatched")
-    .reduce((s, t) => s + t.amount, 0);
+  const revenue =
+    transactions.filter((t) => t.pickup !== "Unmatched").reduce((s, t) => s + t.amount, 0) +
+    weeklySales.reduce((s, w) => s + w.Fertilizer + w.Seeds + w["Vet Supplies"] + w.Pesticides, 0);
   const activeProducts = products.filter((p) => p.active).length;
   const pendingFollowUps = orders.filter((o) => o.status === "Pending").length;
 
