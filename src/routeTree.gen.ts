@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CustomersRouteImport } from './routes/customers'
 import { Route as InventoryRouteImport } from './routes/inventory'
-import { Route as MpesaRouteImport } from './routes/mpesa'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as OrdersRouteImport } from './routes/orders'
 
@@ -31,11 +30,6 @@ const InventoryRoute = InventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MpesaRoute = MpesaRouteImport.update({
-  id: '/mpesa',
-  path: '/mpesa',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
@@ -51,7 +45,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/customers': typeof CustomersRoute
   '/inventory': typeof InventoryRoute
-  '/mpesa': typeof MpesaRoute
   '/onboarding': typeof OnboardingRoute
   '/orders': typeof OrdersRoute
 }
@@ -59,7 +52,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/customers': typeof CustomersRoute
   '/inventory': typeof InventoryRoute
-  '/mpesa': typeof MpesaRoute
   '/onboarding': typeof OnboardingRoute
   '/orders': typeof OrdersRoute
 }
@@ -68,31 +60,21 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/customers': typeof CustomersRoute
   '/inventory': typeof InventoryRoute
-  '/mpesa': typeof MpesaRoute
   '/onboarding': typeof OnboardingRoute
   '/orders': typeof OrdersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    '/' | '/customers' | '/inventory' | '/mpesa' | '/onboarding' | '/orders'
+  fullPaths: '/' | '/customers' | '/inventory' | '/onboarding' | '/orders'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/customers' | '/inventory' | '/mpesa' | '/onboarding' | '/orders'
-  id:
-    | '__root__'
-    | '/'
-    | '/customers'
-    | '/inventory'
-    | '/mpesa'
-    | '/onboarding'
-    | '/orders'
+  to: '/' | '/customers' | '/inventory' | '/onboarding' | '/orders'
+  id: '__root__' | '/' | '/customers' | '/inventory' | '/onboarding' | '/orders'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CustomersRoute: typeof CustomersRoute
   InventoryRoute: typeof InventoryRoute
-  MpesaRoute: typeof MpesaRoute
   OnboardingRoute: typeof OnboardingRoute
   OrdersRoute: typeof OrdersRoute
 }
@@ -120,13 +102,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/mpesa': {
-      id: '/mpesa'
-      path: '/mpesa'
-      fullPath: '/mpesa'
-      preLoaderRoute: typeof MpesaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/onboarding': {
       id: '/onboarding'
       path: '/onboarding'
@@ -148,7 +123,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CustomersRoute: CustomersRoute,
   InventoryRoute: InventoryRoute,
-  MpesaRoute: MpesaRoute,
   OnboardingRoute: OnboardingRoute,
   OrdersRoute: OrdersRoute,
 }
