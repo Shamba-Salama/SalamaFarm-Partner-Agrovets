@@ -46,6 +46,8 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-primary-soft: var(--primary-soft);
   --color-primary-glow: var(--primary-glow);
   --color-border: var(--border);
@@ -92,6 +94,8 @@
   --success-foreground: oklch(0.99 0 0);
   --warning: oklch(0.76 0.15 75);
   --warning-foreground: oklch(0.28 0.06 70);
+  --info: oklch(0.55 0.13 245);
+  --info-foreground: oklch(0.99 0 0);
   --border: oklch(0.918 0.008 250);
   --input: oklch(0.918 0.008 250);
   --ring: oklch(0.383 0.081 155.5);
