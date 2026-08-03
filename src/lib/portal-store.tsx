@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -378,6 +377,7 @@ type Ctx = {
     product: string;
     customer?: string;
   }) => { channel: Channel; code: string };
+  lastIncoming: { thread: Thread; text: string; key: string } | null;
   soundOn: boolean;
   setSoundOn: (v: boolean) => void;
   enablePush: () => void;
@@ -541,44 +541,42 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Simulated realtime channel (stands in for Supabase Realtime / WebSocket feed)
-  const listenerRef = useRef<((t: Thread, text: string) => void) | null>(null);
-  const [incoming, setIncoming] = useState<{ thread: Thread; text: string } | null>(null);
+  const [incoming, setIncoming] = useState<{ thread: Thread; text: string; key: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!profile.open) return;
-    const timer = window.setInterval(
-      () => {
-        const f = farmerPool[Math.floor(Math.random() * farmerPool.length)]!;
-        const text = inquiryLines[Math.floor(Math.random() * inquiryLines.length)]!;
-        const msg: ChatMessage = { id: uid(), from: "farmer", text, time: nowTime() };
-        let delivered: Thread | null = null;
-        setThreads((prev) => {
-          const existing = prev.find((t) => t.phone === f.phone);
-          if (existing) {
-            delivered = {
-              ...existing,
-              unread: existing.unread + 1,
-              messages: [...existing.messages, msg],
-            };
-            return prev.map((t) => (t.id === existing.id ? delivered! : t));
-          }
+    const timer = window.setInterval(() => {
+      const f = farmerPool[Math.floor(Math.random() * farmerPool.length)]!;
+      const text = inquiryLines[Math.floor(Math.random() * inquiryLines.length)]!;
+      const msg: ChatMessage = { id: uid(), from: "farmer", text, time: nowTime() };
+      let delivered: Thread | null = null;
+      setThreads((prev) => {
+        const existing = prev.find((t) => t.phone === f.phone);
+        if (existing) {
           delivered = {
-            id: uid(),
-            farmer: f.name,
-            phone: f.phone,
-            channel: "in-app",
-            topic: f.topic,
-            unread: 1,
-            messages: [msg],
+            ...existing,
+            unread: existing.unread + 1,
+            messages: [...existing.messages, msg],
           };
-          return [delivered, ...prev];
-        });
-        window.setTimeout(() => {
-          if (delivered) setIncoming({ thread: delivered, text });
-        }, 0);
-      },
-      25000,
-    );
+          return prev.map((t) => (t.id === existing.id ? delivered! : t));
+        }
+        delivered = {
+          id: uid(),
+          farmer: f.name,
+          phone: f.phone,
+          channel: "in-app",
+          topic: f.topic,
+          unread: 1,
+          messages: [msg],
+        };
+        return [delivered, ...prev];
+      });
+      window.setTimeout(() => {
+        if (delivered) setIncoming({ thread: delivered, text, key: uid() });
+      }, 0);
+    }, 25000);
     return () => window.clearInterval(timer);
   }, [profile.open]);
 
@@ -589,8 +587,6 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       `New inquiry from ${incoming.thread.farmer}`,
       `${incoming.thread.topic}: ${incoming.text}`,
     );
-    listenerRef.current?.(incoming.thread, incoming.text);
-    setIncoming(null);
   }, [incoming, soundOn]);
 
   const unreadMessages = threads.reduce((s, t) => s + t.unread, 0);
@@ -617,6 +613,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       sendMessage,
       startThread,
       stkPush,
+      lastIncoming: incoming,
       soundOn,
       setSoundOn,
       enablePush,
@@ -641,53 +638,13 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       sendMessage,
       startThread,
       stkPush,
+      incoming,
       soundOn,
       enablePush,
     ],
   );
 
-  return (
-    <PortalContext.Provider value={value}>
-      <RealtimeBridge listenerRef={listenerRef} />
-      {children}
-    </PortalContext.Provider>
-  );
-}
-
-// Registration point used by the layout to show the floating toast.
-export type IncomingListener = (thread: Thread, text: string) => void;
-const BridgeContext = createContext<{
-  register: (fn: IncomingListener) => void;
-} | null>(null);
-
-function RealtimeBridge({
-  listenerRef,
-}: {
-  listenerRef: React.MutableRefObject<IncomingListener | null>;
-}) {
-  useEffect(() => {
-    bridgeRegister = (fn) => {
-      listenerRef.current = fn;
-    };
-    return () => {
-      listenerRef.current = null;
-    };
-  }, [listenerRef]);
-  return null;
-}
-
-let bridgeRegister: ((fn: IncomingListener) => void) | null = null;
-
-export function useIncomingMessage(fn: IncomingListener) {
-  const cb = useRef(fn);
-  cb.current = fn;
-  useEffect(() => {
-    bridgeRegister?.((t, text) => cb.current(t, text));
-  }, []);
-}
-
-export function useBridge() {
-  return useContext(BridgeContext);
+  return <PortalContext.Provider value={value}>{children}</PortalContext.Provider>;
 }
 
 export function usePortal() {
