@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { ArrowUpDown, ImagePlus, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowUpDown, ImagePlus, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { PortalLayout } from "@/components/portal/PortalLayout";
@@ -43,6 +43,7 @@ import {
   type Category,
   type Product,
 } from "@/lib/portal-store";
+import { CsvImportDialog } from "@/components/portal/CsvImportDialog";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/inventory")({
@@ -82,6 +83,7 @@ function InventoryPage() {
   const [category, setCategory] = useState<"all" | Category>("all");
   const [sortAsc, setSortAsc] = useState(true);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [csvOpen, setCsvOpen] = useState(false);
 
   const rows = useMemo(() => {
     const list = products.filter(
@@ -97,9 +99,14 @@ function InventoryPage() {
       title="Product Inventory"
       subtitle={`${products.length} products in your catalogue`}
       actions={
-        <Button size="sm" onClick={() => setEditing(emptyProduct())}>
-          <Plus className="mr-1.5 h-4 w-4" /> Add New Product
-        </Button>
+        <>
+          <Button size="sm" variant="outline" onClick={() => setCsvOpen(true)}>
+            <Upload className="mr-1.5 h-4 w-4" /> Import CSV
+          </Button>
+          <Button size="sm" onClick={() => setEditing(emptyProduct())}>
+            <Plus className="mr-1.5 h-4 w-4" /> Add Product
+          </Button>
+        </>
       }
     >
       <Card>
@@ -216,6 +223,8 @@ function InventoryPage() {
           </div>
         </CardContent>
       </Card>
+
+      <CsvImportDialog open={csvOpen} onOpenChange={setCsvOpen} />
 
       <ProductDrawer
         product={editing}
