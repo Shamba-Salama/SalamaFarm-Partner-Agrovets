@@ -1,12 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { MessageCircle, Phone, Search } from "lucide-react";
+import { Search, Send } from "lucide-react";
+import { toast } from "sonner";
 
 import { PortalLayout } from "@/components/portal/PortalLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -22,23 +32,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { usePortal, type FollowUpStatus } from "@/lib/portal-store";
-import { cn } from "@/lib/utils";
+import { ChannelBadge } from "@/components/portal/ChatDrawer";
+import {
+  FOLLOW_UP_TEMPLATES,
+  usePortal,
+  type CustomerOrder,
+  type FollowUpStatus,
+} from "@/lib/portal-store";
 
 export const Route = createFileRoute("/customers")({
   head: () => ({
     meta: [
-      { title: "Customer Care Hub | SalamaFarm Partner Agrovets" },
+      { title: "Customer Follow-Up Hub | SalamaFarm Partner Agrovets" },
       {
         name: "description",
         content:
-          "Post-purchase follow-ups with one-tap WhatsApp and direct call shortcuts for every farmer who bought from your agrovet.",
+          "Send templated post-purchase follow-ups to farmers in-app or through the SalamaFarm Bulk SMS Gateway.",
       },
-      { property: "og:title", content: "Customer Care Hub | SalamaFarm Partner Agrovets" },
+      { property: "og:title", content: "Customer Follow-Up Hub | SalamaFarm Partner Agrovets" },
       {
         property: "og:description",
-        content: "Track follow-up status and reach farmers on WhatsApp or by phone in one tap.",
+        content: "Templated pest, fertilizer and vaccine reminders for every buyer.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: CustomersPage,
@@ -47,20 +64,16 @@ export const Route = createFileRoute("/customers")({
 const statuses: FollowUpStatus[] = ["Pending", "Contacted", "Satisfied"];
 
 function CustomersPage() {
-  const { orders, setOrderStatus, profile } = usePortal();
+  const { orders, setOrderStatus } = usePortal();
   const [query, setQuery] = useState("");
+  const [target, setTarget] = useState<CustomerOrder | null>(null);
 
   const rows = orders.filter(
     (o) =>
       o.customer.toLowerCase().includes(query.toLowerCase()) ||
       o.phone.includes(query) ||
-      o.mpesaCode.toLowerCase().includes(query.toLowerCase()),
+      o.product.toLowerCase().includes(query.toLowerCase()),
   );
-
-  const waLink = (phone: string, product: string, date: string) =>
-    `https://wa.me/${phone}?text=${encodeURIComponent(
-      `Habari! This is ${profile.name}. Just checking in to see if the ${product} you bought on ${date} worked well for your farm?`,
-    )}`;
 
   return (
     <PortalLayout
@@ -74,7 +87,7 @@ function CustomersPage() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search name, phone or M-Pesa code…"
+              placeholder="Search name, phone or product…"
               className="pl-9"
             />
           </div>
@@ -86,9 +99,10 @@ function CustomersPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Item purchased</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>M-Pesa code</TableHead>
+                  <TableHead>Order type</TableHead>
+                  <TableHead>Platform channel</TableHead>
                   <TableHead>Follow-up</TableHead>
-                  <TableHead className="text-right">Contact</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -98,15 +112,18 @@ function CustomersPage() {
                       <span className="block font-medium">{o.customer}</span>
                       <span className="block text-xs text-muted-foreground">+{o.phone}</span>
                     </TableCell>
-                    <TableCell className="min-w-[180px]">{o.product}</TableCell>
+                    <TableCell className="min-w-[170px]">{o.product}</TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{o.date}</TableCell>
-                    <TableCell className="font-mono text-xs">{o.mpesaCode}</TableCell>
+                    <TableCell className="whitespace-nowrap">{o.orderType}</TableCell>
+                    <TableCell>
+                      <ChannelBadge channel={o.channel} />
+                    </TableCell>
                     <TableCell>
                       <Select
                         value={o.status}
                         onValueChange={(v) => setOrderStatus(o.id, v as FollowUpStatus)}
                       >
-                        <SelectTrigger className="w-[140px]">
+                        <SelectTrigger className="w-[130px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -118,26 +135,17 @@ function CustomersPage() {
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-2">
-                        <Button asChild size="sm">
-                          <a href={waLink(o.phone, o.product, o.date)} target="_blank" rel="noreferrer">
-                            <MessageCircle className="mr-1.5 h-4 w-4" /> WhatsApp
-                          </a>
-                        </Button>
-                        <Button asChild size="icon" variant="outline">
-                          <a href={`tel:+${o.phone}`} aria-label={`Call ${o.customer}`}>
-                            <Phone className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      </div>
+                    <TableCell className="text-right">
+                      <Button size="sm" onClick={() => setTarget(o)}>
+                        <Send className="mr-1.5 h-4 w-4" /> Send Follow-Up
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                      No customers found.
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                      No customers match your search.
                     </TableCell>
                   </TableRow>
                 )}
@@ -147,25 +155,83 @@ function CustomersPage() {
         </CardContent>
       </Card>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {statuses.map((s) => (
-          <Card key={s}>
-            <CardContent className="flex items-center justify-between p-4">
-              <span className="text-sm text-muted-foreground">{s}</span>
-              <Badge
-                className={cn(
-                  "border-transparent",
-                  s === "Pending" && "bg-warning text-warning-foreground",
-                  s === "Contacted" && "bg-secondary text-secondary-foreground",
-                  s === "Satisfied" && "bg-success text-success-foreground",
-                )}
-              >
-                {orders.filter((o) => o.status === s).length}
-              </Badge>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <FollowUpDialog order={target} onClose={() => setTarget(null)} />
     </PortalLayout>
+  );
+}
+
+function FollowUpDialog({ order, onClose }: { order: CustomerOrder | null; onClose: () => void }) {
+  const { startThread, setOrderStatus } = usePortal();
+  const [templateId, setTemplateId] = useState<string>(FOLLOW_UP_TEMPLATES[0].id);
+  const template = FOLLOW_UP_TEMPLATES.find((t) => t.id === templateId) ?? FOLLOW_UP_TEMPLATES[0];
+  const [body, setBody] = useState("");
+
+  const text = body || (order ? template.body(order.customer, order.product) : "");
+
+  return (
+    <Dialog open={!!order} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        {order && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Send follow-up to {order.customer}</DialogTitle>
+              <DialogDescription>
+                {order.channel === "in-app"
+                  ? "Delivers as an in-app push message."
+                  : "This number is offline — routed via the SalamaFarm Bulk SMS Gateway."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <ChannelBadge channel={order.channel} />
+
+            <div className="space-y-1.5">
+              <Label>Template</Label>
+              <Select
+                value={templateId}
+                onValueChange={(v) => {
+                  setTemplateId(v);
+                  setBody("");
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FOLLOW_UP_TEMPLATES.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Message</Label>
+              <Textarea rows={5} value={text} onChange={(e) => setBody(e.target.value)} />
+            </div>
+
+            <DialogFooter>
+              <Button
+                className="w-full"
+                onClick={() => {
+                  startThread(order.customer, order.phone, order.channel, order.product, text);
+                  setOrderStatus(order.id, "Contacted");
+                  onClose();
+                  setBody("");
+                  toast.success(
+                    order.channel === "in-app"
+                      ? "Follow-up delivered in-app"
+                      : "Follow-up queued on the Bulk SMS Gateway",
+                  );
+                }}
+              >
+                <Send className="mr-1.5 h-4 w-4" /> Send follow-up
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
