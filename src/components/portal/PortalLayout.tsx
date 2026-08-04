@@ -1,15 +1,15 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   BellOff,
   FileDown,
   LayoutDashboard,
+  LogOut,
   MessagesSquare,
   Package,
   Receipt,
   Smartphone,
   Sprout,
-  Store,
   Users,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { usePortal } from "@/lib/portal-store";
 import { ChatDrawer } from "@/components/portal/ChatDrawer";
 import { StkPushDialog } from "@/components/portal/StkPushDialog";
@@ -29,7 +30,6 @@ const nav = [
   { to: "/messages", label: "Messages", icon: MessagesSquare, badge: "messages" },
   { to: "/orders", label: "Orders", icon: Receipt, badge: "orders" },
   { to: "/customers", label: "Follow-Ups", icon: Users, badge: "none" },
-  { to: "/onboarding", label: "Store Profile", icon: Store, badge: "none" },
 ] as const;
 
 export function PortalLayout({
@@ -44,10 +44,18 @@ export function PortalLayout({
   children: ReactNode;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
+  const { isAuthenticated, isBootstrapping, logout, vendor } = useAuth();
   const { profile, setProfile, unreadMessages, newOrderCount, openChat, lastIncoming, soundOn, setSoundOn, enablePush } =
     usePortal();
   const [stkOpen, setStkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isBootstrapping && !isAuthenticated) {
+      void navigate({ to: "/login" });
+    }
+  }, [isAuthenticated, isBootstrapping, navigate]);
 
   useEffect(() => {
     enablePush();
@@ -66,6 +74,14 @@ export function PortalLayout({
   const badgeFor = (kind: string) =>
     kind === "messages" ? unreadMessages : kind === "orders" ? newOrderCount : 0;
 
+  if (isBootstrapping || !isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        {isBootstrapping ? "Loading…" : "Redirecting to sign in…"}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar px-3 py-5 lg:flex">
@@ -82,15 +98,29 @@ export function PortalLayout({
             />
           ))}
         </nav>
-        <div className="rounded-xl bg-sidebar-accent/60 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-sidebar-foreground">Alert sounds</span>
-            <Switch checked={soundOn} onCheckedChange={setSoundOn} />
+        <div className="space-y-3">
+          {vendor?.email ? (
+            <p className="truncate px-2 text-[11px] text-sidebar-foreground/70">{vendor.email}</p>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={() => logout()}
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </Button>
+          <div className="rounded-xl bg-sidebar-accent/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-sidebar-foreground">Alert sounds</span>
+              <Switch checked={soundOn} onCheckedChange={setSoundOn} />
+            </div>
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-sidebar-foreground/70">
+              {soundOn ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+              Chime + push on new farmer messages
+            </p>
           </div>
-          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-sidebar-foreground/70">
-            {soundOn ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
-            Chime + push on new farmer messages
-          </p>
         </div>
       </aside>
 
@@ -128,6 +158,9 @@ export function PortalLayout({
                 <span className="hidden md:inline">Export Sales Report</span>
                 <span className="md:hidden">Export</span>
               </Button>
+              <Button size="sm" variant="outline" className="lg:hidden" onClick={() => logout()}>
+                <LogOut className="h-4 w-4" />
+              </Button>
               {actions}
             </div>
           </div>
@@ -136,7 +169,7 @@ export function PortalLayout({
         <main className="px-4 pb-28 pt-5 sm:px-6 lg:pb-10">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-border bg-card lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-card lg:hidden">
         {nav.map(({ to, label, icon: Icon, badge }) => {
           const active = pathname === to;
           const count = badgeFor(badge);
@@ -193,7 +226,7 @@ function NavItem({
 }: {
   to: string;
   label: string;
-  icon: typeof Store;
+  icon: typeof LayoutDashboard;
   active: boolean;
   count: number;
 }) {
