@@ -1,0 +1,10 @@
+# Django 5.2 LTS — use Python 3.12+ (see README-BACKEND.md)
+Django>=5.2,<5.3
+
+# Compatible with Django 5.2 (verified on 5.2.16)
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+django-environ==0.14.0
+Pillow==11.3.0
+requests==2.34.2
