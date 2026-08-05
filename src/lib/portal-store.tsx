@@ -8,6 +8,17 @@ import {
   type ReactNode,
 } from "react";
 
+import {
+  apiStoreToProfile,
+  emptyStoreProfile,
+  fetchStore,
+  patchStore,
+  type StoreProfile,
+} from "@/lib/store-api";
+
+export type { ApiStore, StoreProfile } from "@/lib/store-api";
+export { emptyStoreProfile } from "@/lib/store-api";
+
 export type Category = "Fertilizer" | "Seeds" | "Vet Supplies" | "Pesticides";
 
 export const CATEGORIES: Category[] = ["Fertilizer", "Seeds", "Vet Supplies", "Pesticides"];
@@ -61,16 +72,6 @@ export type Thread = {
   topic: string;
   unread: number;
   messages: ChatMessage[];
-};
-
-export type StoreProfile = {
-  name: string;
-  town: string;
-  county: string;
-  till: string;
-  attendantPhone: string;
-  open: boolean;
-  onboarded: boolean;
 };
 
 export const FOLLOW_UP_TEMPLATES = [
@@ -353,7 +354,16 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 type Ctx = {
   profile: StoreProfile;
-  setProfile: (p: Partial<StoreProfile>) => void;
+  storeReady: boolean;
+  /** Apply a store profile from an API response without a network call. */
+  hydrateProfile: (p: Partial<StoreProfile> | StoreProfile) => void;
+  resetProfile: () => void;
+  /** GET /store/ and replace local profile. */
+  refreshStore: () => Promise<StoreProfile>;
+  /** PATCH /store/ and update local profile from the response. */
+  updateStore: (p: Partial<StoreProfile>) => Promise<StoreProfile>;
+  /** Optimistic PATCH { open: !current }. Reverts on failure. */
+  toggleStoreOpen: () => Promise<StoreProfile>;
   products: Product[];
   saveProduct: (p: Product) => void;
   importProducts: (p: Product[]) => void;
@@ -386,15 +396,8 @@ type Ctx = {
 const PortalContext = createContext<Ctx | null>(null);
 
 export function PortalProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfileState] = useState<StoreProfile>({
-    name: "Green Valley Agrovet",
-    town: "Nakuru Town",
-    county: "Nakuru",
-    till: "5203817",
-    attendantPhone: "0711223344",
-    open: true,
-    onboarded: false,
-  });
+  const [profile, setProfileState] = useState<StoreProfile>(() => emptyStoreProfile());
+  const [storeReady, setStoreReady] = useState(false);
   const [products, setProducts] = useState<Product[]>(seedProducts);
   const [orders, setOrders] = useState<CustomerOrder[]>(seedOrders);
   const [threads, setThreads] = useState<Thread[]>(seedThreads);
@@ -402,10 +405,48 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
 
-  const setProfile = useCallback(
-    (p: Partial<StoreProfile>) => setProfileState((prev) => ({ ...prev, ...p })),
-    [],
-  );
+  const hydrateProfile = useCallback((p: Partial<StoreProfile> | StoreProfile) => {
+    setProfileState((prev) => ({ ...prev, ...p }));
+    setStoreReady(true);
+  }, []);
+
+  const resetProfile = useCallback(() => {
+    setProfileState(emptyStoreProfile());
+    setStoreReady(false);
+  }, []);
+
+  const refreshStore = useCallback(async () => {
+    const store = await fetchStore();
+    const next = apiStoreToProfile(store);
+    setProfileState(next);
+    setStoreReady(true);
+    return next;
+  }, []);
+
+  const updateStore = useCallback(async (p: Partial<StoreProfile>) => {
+    const store = await patchStore(p);
+    const next = apiStoreToProfile(store);
+    setProfileState(next);
+    setStoreReady(true);
+    return next;
+  }, []);
+
+  const toggleStoreOpen = useCallback(async () => {
+    let previous = true;
+    setProfileState((prev) => {
+      previous = prev.open;
+      return { ...prev, open: !prev.open };
+    });
+    try {
+      const store = await patchStore({ open: !previous });
+      const next = apiStoreToProfile(store);
+      setProfileState(next);
+      return next;
+    } catch (err) {
+      setProfileState((prev) => ({ ...prev, open: previous }));
+      throw err;
+    }
+  }, []);
 
   const saveProduct = useCallback((p: Product) => {
     setProducts((prev) =>
@@ -594,7 +635,12 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       profile,
-      setProfile,
+      storeReady,
+      hydrateProfile,
+      resetProfile,
+      refreshStore,
+      updateStore,
+      toggleStoreOpen,
       products,
       saveProduct,
       importProducts,
@@ -620,7 +666,12 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }),
     [
       profile,
-      setProfile,
+      storeReady,
+      hydrateProfile,
+      resetProfile,
+      refreshStore,
+      updateStore,
+      toggleStoreOpen,
       products,
       saveProduct,
       importProducts,

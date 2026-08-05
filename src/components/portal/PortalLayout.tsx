@@ -10,6 +10,7 @@ import {
   Receipt,
   Smartphone,
   Sprout,
+  Store,
   Users,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -18,7 +19,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { formatApiError } from "@/lib/format-api-error";
 import { usePortal } from "@/lib/portal-store";
 import { ChatDrawer } from "@/components/portal/ChatDrawer";
 import { StkPushDialog } from "@/components/portal/StkPushDialog";
@@ -30,6 +33,7 @@ const nav = [
   { to: "/messages", label: "Messages", icon: MessagesSquare, badge: "messages" },
   { to: "/orders", label: "Orders", icon: Receipt, badge: "orders" },
   { to: "/customers", label: "Follow-Ups", icon: Users, badge: "none" },
+  { to: "/settings", label: "Settings", icon: Store, badge: "none" },
 ] as const;
 
 export function PortalLayout({
@@ -46,10 +50,11 @@ export function PortalLayout({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const { isAuthenticated, isBootstrapping, logout, vendor } = useAuth();
-  const { profile, setProfile, unreadMessages, newOrderCount, openChat, lastIncoming, soundOn, setSoundOn, enablePush } =
+  const { profile, toggleStoreOpen, unreadMessages, newOrderCount, openChat, lastIncoming, soundOn, setSoundOn, enablePush } =
     usePortal();
   const [stkOpen, setStkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [togglingOpen, setTogglingOpen] = useState(false);
 
   useEffect(() => {
     if (!isBootstrapping && !isAuthenticated) {
@@ -73,6 +78,18 @@ export function PortalLayout({
 
   const badgeFor = (kind: string) =>
     kind === "messages" ? unreadMessages : kind === "orders" ? newOrderCount : 0;
+
+  const onToggleOpen = async () => {
+    if (togglingOpen) return;
+    setTogglingOpen(true);
+    try {
+      await toggleStoreOpen();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? formatApiError(err) : "Could not update store status.");
+    } finally {
+      setTogglingOpen(false);
+    }
+  };
 
   if (isBootstrapping || !isAuthenticated) {
     return (
@@ -139,12 +156,15 @@ export function PortalLayout({
 
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setProfile({ open: !profile.open })}
+                type="button"
+                disabled={togglingOpen}
+                onClick={() => void onToggleOpen()}
                 className={cn(
                   "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
                   profile.open
                     ? "border-success/40 bg-success/10 text-success"
                     : "border-destructive/40 bg-destructive/10 text-destructive",
+                  togglingOpen && "opacity-70",
                 )}
               >
                 Store Status: {profile.open ? "Open 🟢" : "Closed 🔴"}
@@ -169,7 +189,7 @@ export function PortalLayout({
         <main className="px-4 pb-28 pt-5 sm:px-6 lg:pb-10">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-card lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-border bg-card lg:hidden">
         {nav.map(({ to, label, icon: Icon, badge }) => {
           const active = pathname === to;
           const count = badgeFor(badge);
@@ -253,12 +273,26 @@ function NavItem({
 
 function WelcomeBanner() {
   const { profile } = usePortal();
+  const verified = profile.onboarded;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-success px-4 py-2 text-xs font-medium text-success-foreground sm:px-6">
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs font-medium sm:px-6",
+        verified
+          ? "bg-success text-success-foreground"
+          : "bg-amber-600 text-white",
+      )}
+    >
       <Sprout className="h-4 w-4" />
-      <span>Welcome to SalamaFarm Partner Portal! Start listing your inventory.</span>
-      <span className="opacity-80">
-        {profile.name} · {profile.town}, {profile.county} · Till {profile.till}
+      <span>
+        {verified ? "Verified Merchant ✅" : "Pending Verification ⏳"}
+      </span>
+      <span className="opacity-90">
+        {profile.name || "Your store"}
+        {profile.town || profile.county
+          ? ` · ${[profile.town, profile.county].filter(Boolean).join(", ")}`
+          : ""}
+        {profile.till ? ` · Till ${profile.till}` : ""}
       </span>
     </div>
   );

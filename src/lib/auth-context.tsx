@@ -12,6 +12,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { api, ApiError, setUnauthorizedHandler } from "@/lib/api-client";
 import { clearTokens, getAccessToken, setTokens } from "@/lib/auth-storage";
 import { usePortal } from "@/lib/portal-store";
+import { apiStoreToProfile, type ApiStore } from "@/lib/store-api";
 
 export type StoreSummary = {
   id: number;
@@ -59,34 +60,27 @@ type AuthCtx = {
 
 const AuthContext = createContext<AuthCtx | null>(null);
 
-function applyStoreToPortal(
-  setProfile: (p: Partial<{ name: string; town: string; county: string; till: string; attendantPhone: string; open: boolean; onboarded: boolean }>) => void,
-  store: StoreSummary | null | undefined,
-) {
-  if (!store) return;
-  setProfile({
-    name: store.name,
-    town: store.town,
-    county: store.county,
-    till: store.till,
-    attendantPhone: store.attendant_phone,
-    open: store.open,
-    onboarded: store.onboarded,
-  });
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { setProfile } = usePortal();
+  const { refreshStore, resetProfile, hydrateProfile } = usePortal();
   const navigate = useNavigate();
   const [vendor, setVendor] = useState<VendorMe | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
 
+  const loadStoreProfile = useCallback(async () => {
+    try {
+      await refreshStore();
+    } catch (err) {
+      console.warn("Failed to load store profile", err);
+      throw err;
+    }
+  }, [refreshStore]);
+
   const logout = useCallback(() => {
     clearTokens();
     setVendor(null);
-    setProfile({ onboarded: false });
+    resetProfile();
     void navigate({ to: "/login" });
-  }, [navigate, setProfile]);
+  }, [navigate, resetProfile]);
 
   const refreshMe = useCallback(async () => {
     if (!getAccessToken()) {
@@ -95,9 +89,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const me = await api.get<VendorMe>("/auth/me/");
     setVendor(me);
-    applyStoreToPortal(setProfile, me.store);
+    try {
+      await loadStoreProfile();
+    } catch {
+      if (me.store) {
+        hydrateProfile(
+          apiStoreToProfile({
+            id: me.store.id,
+            name: me.store.name,
+            town: me.store.town,
+            county: me.store.county,
+            till: me.store.till,
+            attendant_phone: me.store.attendant_phone,
+            open: me.store.open,
+            onboarded: me.store.onboarded,
+          }),
+        );
+      }
+    }
     return me;
-  }, [setProfile]);
+  }, [loadStoreProfile, hydrateProfile]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -109,10 +120,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTokens(tokens.access, tokens.refresh);
       const me = await api.get<VendorMe>("/auth/me/");
       setVendor(me);
-      applyStoreToPortal(setProfile, me.store);
+      try {
+        await loadStoreProfile();
+      } catch {
+        if (me.store) {
+          hydrateProfile(
+            apiStoreToProfile({
+              id: me.store.id,
+              name: me.store.name,
+              town: me.store.town,
+              county: me.store.county,
+              till: me.store.till,
+              attendant_phone: me.store.attendant_phone,
+              open: me.store.open,
+              onboarded: me.store.onboarded,
+            }),
+          );
+        }
+      }
       return me;
     },
-    [setProfile],
+    [loadStoreProfile, hydrateProfile],
   );
 
   const register = useCallback(
@@ -130,26 +158,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Register does not return JWT — obtain tokens then mark store onboarded.
       const me = await login(input.email, input.password);
       try {
-        const store = await api.patch<StoreSummary>("/store/", { onboarded: true });
-        const next = { ...me, store: { ...store } };
+        const store = await api.patch<ApiStore>("/store/", { onboarded: true });
+        hydrateProfile(apiStoreToProfile(store));
+        const next = {
+          ...me,
+          store: {
+            id: store.id,
+            name: store.name,
+            town: store.town,
+            county: store.county,
+            till: store.till,
+            attendant_phone: store.attendant_phone,
+            open: store.open,
+            onboarded: store.onboarded,
+          },
+        };
         setVendor(next);
-        applyStoreToPortal(setProfile, store);
         return next;
       } catch {
         return me;
       }
     },
-    [login, setProfile],
+    [login, hydrateProfile],
   );
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
       clearTokens();
       setVendor(null);
+      resetProfile();
       void navigate({ to: "/login" });
     });
     return () => setUnauthorizedHandler(null);
-  }, [navigate]);
+  }, [navigate, resetProfile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) {
           clearTokens();
           setVendor(null);
+          resetProfile();
           if (!(err instanceof ApiError && err.status === 401)) {
             console.warn("Failed to restore session", err);
           }
@@ -175,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshMe]);
+  }, [refreshMe, resetProfile]);
 
   const value = useMemo<AuthCtx>(
     () => ({

@@ -49,7 +49,7 @@ export const Route = createFileRoute("/")({
 });
 
 function DashboardPage() {
-  const { orders, products, threads, unreadMessages } = usePortal();
+  const { orders, products, threads, unreadMessages, profile } = usePortal();
 
   const revenue = orders.reduce((s, o) => s + o.amount, 0);
   const pending = orders.filter((o) => o.status === "Pending").length;
@@ -60,8 +60,10 @@ function DashboardPage() {
     Revenue: w.Fertilizer + w.Seeds + w["Vet Supplies"] + w.Pesticides,
   }));
 
+  const storeLabel = profile.name || "Your store";
+
   return (
-    <PortalLayout title="Dashboard Overview" subtitle="Green Valley Agrovet · last 6 weeks">
+    <PortalLayout title="Dashboard Overview" subtitle={`${storeLabel} · last 6 weeks`}>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric icon={TrendingUp} label="Total revenue" value={formatKES(revenue)} note="All recorded M-Pesa sales" />
         <Metric icon={Package} label="Active products" value={String(products.filter((p) => p.active).length)} note={`${alerts.length} need attention`} />
