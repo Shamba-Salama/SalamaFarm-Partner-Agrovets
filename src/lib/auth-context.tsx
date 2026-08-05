@@ -61,7 +61,8 @@ type AuthCtx = {
 const AuthContext = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { refreshStore, resetProfile, hydrateProfile } = usePortal();
+  const { refreshStore, resetProfile, hydrateProfile, refreshProducts, resetProducts } =
+    usePortal();
   const navigate = useNavigate();
   const [vendor, setVendor] = useState<VendorMe | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -75,12 +76,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshStore]);
 
+  const loadProducts = useCallback(async () => {
+    try {
+      await refreshProducts();
+    } catch (err) {
+      console.warn("Failed to load products", err);
+    }
+  }, [refreshProducts]);
+
   const logout = useCallback(() => {
     clearTokens();
     setVendor(null);
     resetProfile();
+    resetProducts();
     void navigate({ to: "/login" });
-  }, [navigate, resetProfile]);
+  }, [navigate, resetProfile, resetProducts]);
 
   const refreshMe = useCallback(async () => {
     if (!getAccessToken()) {
@@ -107,8 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
     }
+    await loadProducts();
     return me;
-  }, [loadStoreProfile, hydrateProfile]);
+  }, [loadStoreProfile, hydrateProfile, loadProducts]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -138,9 +149,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
       }
+      await loadProducts();
       return me;
     },
-    [loadStoreProfile, hydrateProfile],
+    [loadStoreProfile, hydrateProfile, loadProducts],
   );
 
   const register = useCallback(
@@ -187,10 +199,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTokens();
       setVendor(null);
       resetProfile();
+      resetProducts();
       void navigate({ to: "/login" });
     });
     return () => setUnauthorizedHandler(null);
-  }, [navigate, resetProfile]);
+  }, [navigate, resetProfile, resetProducts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,6 +219,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearTokens();
           setVendor(null);
           resetProfile();
+          resetProducts();
           if (!(err instanceof ApiError && err.status === 401)) {
             console.warn("Failed to restore session", err);
           }
@@ -217,7 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshMe, resetProfile]);
+  }, [refreshMe, resetProfile, resetProducts]);
 
   const value = useMemo<AuthCtx>(
     () => ({

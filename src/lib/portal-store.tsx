@@ -15,6 +15,17 @@ import {
   patchStore,
   type StoreProfile,
 } from "@/lib/store-api";
+import {
+  apiProductToProduct,
+  createProduct as createProductApi,
+  deleteProductApi,
+  fetchProducts,
+  importProductsCsv,
+  toggleProductActive,
+  updateProduct as updateProductApi,
+  type ProductWriteBody,
+} from "@/lib/catalog-api";
+import { ApiError } from "@/lib/api-client";
 
 export type { ApiStore, StoreProfile } from "@/lib/store-api";
 export { emptyStoreProfile } from "@/lib/store-api";
@@ -32,8 +43,9 @@ export type Product = {
   description: string;
   price: number;
   stock: number;
-  expiry: string; // ISO date
+  expiry: string | null;
   image: string;
+  imageUrl?: string | null;
   active: boolean;
 };
 
@@ -100,75 +112,6 @@ export const FOLLOW_UP_TEMPLATES = [
       `Habari ${c}! Planting season is here and ${item} is back in stock at a partner price. Reply to reserve yours.`,
   },
 ] as const;
-
-const seedProducts: Product[] = [
-  {
-    id: "p1",
-    name: "YaraMila Cereal 50kg",
-    category: "Fertilizer",
-    description: "NPK 23:10:5 top dressing fertilizer. Apply 1 handful per planting hole.",
-    price: 4850,
-    stock: 24,
-    expiry: "2027-04-30",
-    image: "🌾",
-    active: true,
-  },
-  {
-    id: "p2",
-    name: "Simba Hybrid Maize SC Duma 43",
-    category: "Seeds",
-    description: "Early maturing drought tolerant maize seed, 2kg pack.",
-    price: 780,
-    stock: 3,
-    expiry: "2026-11-12",
-    image: "🌽",
-    active: true,
-  },
-  {
-    id: "p3",
-    name: "Amitraz Cattle Dip 1L",
-    category: "Vet Supplies",
-    description: "Acaricide for tick control in cattle. Dilute 2ml per litre of water.",
-    price: 1650,
-    stock: 12,
-    expiry: "2026-08-20",
-    image: "🐄",
-    active: true,
-  },
-  {
-    id: "p4",
-    name: "Ridomil Gold MZ 250g",
-    category: "Pesticides",
-    description: "Systemic fungicide for late blight in potatoes and tomatoes.",
-    price: 1200,
-    stock: 8,
-    expiry: "2026-07-25",
-    image: "🧴",
-    active: true,
-  },
-  {
-    id: "p5",
-    name: "Kienyeji Chick Mash 20kg",
-    category: "Vet Supplies",
-    description: "Balanced starter mash for indigenous chicks, 0-8 weeks.",
-    price: 1980,
-    stock: 2,
-    expiry: "2026-09-05",
-    image: "🐓",
-    active: false,
-  },
-  {
-    id: "p6",
-    name: "Sukari F1 Tomato Seeds 10g",
-    category: "Seeds",
-    description: "High yielding determinate tomato variety for open field.",
-    price: 2400,
-    stock: 17,
-    expiry: "2027-01-18",
-    image: "🍅",
-    active: true,
-  },
-];
 
 const seedOrders: CustomerOrder[] = [
   {
@@ -294,16 +237,20 @@ export const weeklySales = [
   { week: "Wk 27", Fertilizer: 72400, Seeds: 29900, "Vet Supplies": 31500, Pesticides: 20600 },
 ];
 
-export function daysUntil(dateStr: string) {
-  const today = new Date("2026-07-30T00:00:00Z").getTime();
-  return Math.round((new Date(dateStr + "T00:00:00Z").getTime() - today) / 86400000);
+export function daysUntil(dateStr: string | null): number | null {
+  if (!dateStr || !String(dateStr).trim()) return null;
+  const parsed = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const now = new Date();
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((parsed.getTime() - todayMs) / 86400000);
 }
 
 export function stockStatus(p: Product): "In Stock" | "Low Stock" | "Expired" | "Clearance" {
   const d = daysUntil(p.expiry);
-  if (d < 0) return "Expired";
+  if (d !== null && d < 0) return "Expired";
   if (p.stock < 5) return "Low Stock";
-  if (d <= 30) return "Clearance";
+  if (d !== null && d <= 30) return "Clearance";
   return "In Stock";
 }
 
@@ -365,10 +312,15 @@ type Ctx = {
   /** Optimistic PATCH { open: !current }. Reverts on failure. */
   toggleStoreOpen: () => Promise<StoreProfile>;
   products: Product[];
-  saveProduct: (p: Product) => void;
-  importProducts: (p: Product[]) => void;
-  deleteProduct: (id: string) => void;
-  toggleProduct: (id: string) => void;
+  productsReady: boolean;
+  productsLoading: boolean;
+  refreshProducts: () => Promise<Product[]>;
+  createProductEntry: (draft: ProductWriteBody) => Promise<Product>;
+  updateProductEntry: (id: string, draft: ProductWriteBody) => Promise<Product>;
+  removeProduct: (id: string) => Promise<void>;
+  toggleProduct: (id: string) => Promise<Product>;
+  importProductsCsvFile: (file: File) => Promise<{ created: number }>;
+  resetProducts: () => void;
   orders: CustomerOrder[];
   setOrderStatus: (id: string, status: FollowUpStatus) => void;
   setPickup: (id: string, pickup: CustomerOrder["pickup"]) => void;
@@ -380,13 +332,17 @@ type Ctx = {
   openChat: (id: string | null) => void;
   markRead: (id: string) => void;
   sendMessage: (threadId: string, text: string) => void;
-  startThread: (farmer: string, phone: string, channel: Channel, topic: string, text: string) => void;
-  stkPush: (input: {
-    phone: string;
-    amount: number;
-    product: string;
-    customer?: string;
-  }) => { channel: Channel; code: string };
+  startThread: (
+    farmer: string,
+    phone: string,
+    channel: Channel,
+    topic: string,
+    text: string,
+  ) => void;
+  stkPush: (input: { phone: string; amount: number; product: string; customer?: string }) => {
+    channel: Channel;
+    code: string;
+  };
   lastIncoming: { thread: Thread; text: string; key: string } | null;
   soundOn: boolean;
   setSoundOn: (v: boolean) => void;
@@ -398,12 +354,21 @@ const PortalContext = createContext<Ctx | null>(null);
 export function PortalProvider({ children }: { children: ReactNode }) {
   const [profile, setProfileState] = useState<StoreProfile>(() => emptyStoreProfile());
   const [storeReady, setStoreReady] = useState(false);
-  const [products, setProducts] = useState<Product[]>(seedProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsReady, setProductsReady] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [orders, setOrders] = useState<CustomerOrder[]>(seedOrders);
   const [threads, setThreads] = useState<Thread[]>(seedThreads);
   const [newOrderCount, setNewOrderCount] = useState(1);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+
+  const mapProduct = useCallback((raw: ReturnType<typeof apiProductToProduct>): Product => {
+    const category = CATEGORIES.includes(raw.category as Category)
+      ? (raw.category as Category)
+      : "Fertilizer";
+    return { ...raw, category };
+  }, []);
 
   const hydrateProfile = useCallback((p: Partial<StoreProfile> | StoreProfile) => {
     setProfileState((prev) => ({ ...prev, ...p }));
@@ -448,26 +413,113 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const saveProduct = useCallback((p: Product) => {
-    setProducts((prev) =>
-      prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? p : x)) : [p, ...prev],
-    );
+  const resetProducts = useCallback(() => {
+    setProducts([]);
+    setProductsReady(false);
+    setProductsLoading(false);
   }, []);
 
-  const importProducts = useCallback(
-    (list: Product[]) => setProducts((prev) => [...list, ...prev]),
-    [],
+  const refreshProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const list = await fetchProducts();
+      const next = list.map((row) => mapProduct(apiProductToProduct(row)));
+      setProducts(next);
+      setProductsReady(true);
+      return next;
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [mapProduct]);
+
+  const createProductEntry = useCallback(
+    async (draft: ProductWriteBody) => {
+      const created = mapProduct(apiProductToProduct(await createProductApi(draft)));
+      setProducts((prev) => [created, ...prev]);
+      setProductsReady(true);
+      return created;
+    },
+    [mapProduct],
   );
 
-  const deleteProduct = useCallback(
-    (id: string) => setProducts((prev) => prev.filter((p) => p.id !== id)),
-    [],
+  const updateProductEntry = useCallback(
+    async (id: string, draft: ProductWriteBody) => {
+      try {
+        const updated = mapProduct(apiProductToProduct(await updateProductApi(id, draft)));
+        setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshProducts();
+          throw new ApiError("This product no longer exists.", 404, err.body);
+        }
+        throw err;
+      }
+    },
+    [mapProduct, refreshProducts],
+  );
+
+  const removeProduct = useCallback(
+    async (id: string) => {
+      let removed: Product | undefined;
+      setProducts((prev) => {
+        removed = prev.find((p) => p.id === id);
+        return prev.filter((p) => p.id !== id);
+      });
+      try {
+        await deleteProductApi(id);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshProducts();
+          throw new ApiError("This product no longer exists.", 404, err.body);
+        }
+        if (removed) {
+          setProducts((prev) => {
+            if (prev.some((p) => p.id === removed!.id)) return prev;
+            return [removed!, ...prev];
+          });
+        }
+        throw err;
+      }
+    },
+    [refreshProducts],
   );
 
   const toggleProduct = useCallback(
-    (id: string) =>
-      setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, active: !p.active } : p))),
-    [],
+    async (id: string) => {
+      let previousActive = true;
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== id) return p;
+          previousActive = p.active;
+          return { ...p, active: !p.active };
+        }),
+      );
+      try {
+        const updated = mapProduct(apiProductToProduct(await toggleProductActive(id)));
+        setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshProducts();
+          throw new ApiError("This product no longer exists.", 404, err.body);
+        }
+        setProducts((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, active: previousActive } : p)),
+        );
+        throw err;
+      }
+    },
+    [mapProduct, refreshProducts],
+  );
+
+  const importProductsCsvFile = useCallback(
+    async (file: File) => {
+      const result = await importProductsCsv(file);
+      await refreshProducts();
+      return { created: result.created };
+    },
+    [refreshProducts],
   );
 
   const setOrderStatus = useCallback(
@@ -543,14 +595,18 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const stkPush = useCallback<Ctx["stkPush"]>(
     ({ phone, amount, product, customer }) => {
       const normalized = phone.replace(/\D/g, "").replace(/^0/, "254");
-      const known = orders.find((o) => o.phone === normalized) ?? threads.find((t) => t.phone === normalized);
+      const known =
+        orders.find((o) => o.phone === normalized) ?? threads.find((t) => t.phone === normalized);
       const channel: Channel = known ? "in-app" : "offline-sms";
       const code = "SG" + uid().toUpperCase().slice(0, 8);
       const d = new Date();
       setOrders((prev) => [
         {
           id: uid(),
-          customer: customer?.trim() || (known && "farmer" in known ? known.farmer : known?.customer) || "Counter Customer",
+          customer:
+            customer?.trim() ||
+            (known && "farmer" in known ? known.farmer : known?.customer) ||
+            "Counter Customer",
           phone: normalized,
           product,
           items: [{ name: product, qty: 1, price: amount }],
@@ -642,10 +698,15 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       updateStore,
       toggleStoreOpen,
       products,
-      saveProduct,
-      importProducts,
-      deleteProduct,
+      productsReady,
+      productsLoading,
+      refreshProducts,
+      createProductEntry,
+      updateProductEntry,
+      removeProduct,
       toggleProduct,
+      importProductsCsvFile,
+      resetProducts,
       orders,
       setOrderStatus,
       setPickup,
@@ -673,10 +734,15 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       updateStore,
       toggleStoreOpen,
       products,
-      saveProduct,
-      importProducts,
-      deleteProduct,
+      productsReady,
+      productsLoading,
+      refreshProducts,
+      createProductEntry,
+      updateProductEntry,
+      removeProduct,
       toggleProduct,
+      importProductsCsvFile,
+      resetProducts,
       orders,
       setOrderStatus,
       setPickup,

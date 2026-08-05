@@ -1,12 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  MessagesSquare,
-  Package,
-  Receipt,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, MessagesSquare, Package, Receipt, TrendingUp, Users } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -65,10 +58,30 @@ function DashboardPage() {
   return (
     <PortalLayout title="Dashboard Overview" subtitle={`${storeLabel} · last 6 weeks`}>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={TrendingUp} label="Total revenue" value={formatKES(revenue)} note="All recorded M-Pesa sales" />
-        <Metric icon={Package} label="Active products" value={String(products.filter((p) => p.active).length)} note={`${alerts.length} need attention`} />
-        <Metric icon={MessagesSquare} label="Unread messages" value={String(unreadMessages)} note={`${threads.length} farmer conversations`} />
-        <Metric icon={Users} label="Pending follow-ups" value={String(pending)} note="Customers awaiting a check-in" />
+        <Metric
+          icon={TrendingUp}
+          label="Total revenue"
+          value={formatKES(revenue)}
+          note="All recorded M-Pesa sales"
+        />
+        <Metric
+          icon={Package}
+          label="Active products"
+          value={String(products.filter((p) => p.active).length)}
+          note={`${alerts.length} need attention`}
+        />
+        <Metric
+          icon={MessagesSquare}
+          label="Unread messages"
+          value={String(unreadMessages)}
+          note={`${threads.length} farmer conversations`}
+        />
+        <Metric
+          icon={Users}
+          label="Pending follow-ups"
+          value={String(pending)}
+          note="Customers awaiting a check-in"
+        />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
@@ -84,10 +97,20 @@ function DashboardPage() {
                 <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
                 <Tooltip formatter={(v: number) => formatKES(v)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Fertilizer" stackId="a" fill="var(--color-primary)" radius={[0, 0, 0, 0]} />
+                <Bar
+                  dataKey="Fertilizer"
+                  stackId="a"
+                  fill="var(--color-primary)"
+                  radius={[0, 0, 0, 0]}
+                />
                 <Bar dataKey="Seeds" stackId="a" fill="var(--color-success)" />
                 <Bar dataKey="Vet Supplies" stackId="a" fill="var(--color-info)" />
-                <Bar dataKey="Pesticides" stackId="a" fill="var(--color-warning)" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="Pesticides"
+                  stackId="a"
+                  fill="var(--color-warning)"
+                  radius={[4, 4, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -104,7 +127,13 @@ function DashboardPage() {
                 <XAxis dataKey="week" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
                 <Tooltip formatter={(v: number) => formatKES(v)} />
-                <Line type="monotone" dataKey="Revenue" stroke="var(--color-primary)" strokeWidth={2.5} dot={false} />
+                <Line
+                  type="monotone"
+                  dataKey="Revenue"
+                  stroke="var(--color-primary)"
+                  strokeWidth={2.5}
+                  dot={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -127,7 +156,7 @@ function DashboardPage() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{p.name}</span>
                   <span className="block text-xs text-muted-foreground">
-                    {p.stock} in stock · expires {p.expiry}
+                    {p.stock} in stock · {p.expiry ? `expires ${p.expiry}` : "no expiry date"}
                   </span>
                 </span>
                 <Badge variant="secondary" className="shrink-0">
@@ -136,7 +165,9 @@ function DashboardPage() {
               </div>
             ))}
             {!alerts.length && (
-              <p className="py-6 text-center text-sm text-muted-foreground">All stock is healthy.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                All stock is healthy.
+              </p>
             )}
             <Button asChild variant="outline" size="sm" className="w-full">
               <Link to="/inventory">Manage inventory</Link>
@@ -152,7 +183,10 @@ function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {orders.slice(0, 5).map((o) => (
-              <div key={o.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 p-2.5">
+              <div
+                key={o.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 p-2.5"
+              >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{o.customer}</span>
                   <span className="block truncate text-xs text-muted-foreground">
