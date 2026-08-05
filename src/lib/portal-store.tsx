@@ -25,10 +25,23 @@ import {
   updateProduct as updateProductApi,
   type ProductWriteBody,
 } from "@/lib/catalog-api";
+import {
+  apiCustomerToCustomer,
+  apiOrderToOrder,
+  buildCounterOrderBody,
+  createOrder as createOrderApi,
+  fetchCustomers,
+  fetchOrders,
+  patchOrder,
+  upsertCustomer,
+  type PortalCustomer,
+} from "@/lib/crm-api";
 import { ApiError } from "@/lib/api-client";
 
 export type { ApiStore, StoreProfile } from "@/lib/store-api";
 export { emptyStoreProfile } from "@/lib/store-api";
+export type { PortalCustomer } from "@/lib/crm-api";
+export type { ProductWriteBody } from "@/lib/catalog-api";
 
 export type Category = "Fertilizer" | "Seeds" | "Vet Supplies" | "Pesticides";
 
@@ -56,6 +69,7 @@ export type OrderItem = { name: string; qty: number; price: number };
 export type CustomerOrder = {
   id: string;
   customer: string;
+  customerId?: string;
   phone: string;
   product: string;
   items: OrderItem[];
@@ -112,69 +126,6 @@ export const FOLLOW_UP_TEMPLATES = [
       `Habari ${c}! Planting season is here and ${item} is back in stock at a partner price. Reply to reserve yours.`,
   },
 ] as const;
-
-const seedOrders: CustomerOrder[] = [
-  {
-    id: "o1",
-    customer: "Wanjiku Mwangi",
-    phone: "254712345678",
-    product: "YaraMila Cereal 50kg",
-    items: [{ name: "YaraMila Cereal 50kg", qty: 1, price: 4850 }],
-    date: "2026-07-24",
-    time: "15:02",
-    mpesaCode: "SGH4KL92AC",
-    amount: 4850,
-    status: "Pending",
-    channel: "in-app",
-    orderType: "Counter Pickup",
-    pickup: "Collected",
-  },
-  {
-    id: "o2",
-    customer: "Kiprop Langat",
-    phone: "254720998877",
-    product: "Amitraz Cattle Dip 1L",
-    items: [{ name: "Amitraz Cattle Dip 1L", qty: 1, price: 1650 }],
-    date: "2026-07-22",
-    time: "11:41",
-    mpesaCode: "SGF8ZZ21QW",
-    amount: 1650,
-    status: "Contacted",
-    channel: "offline-sms",
-    orderType: "Counter Pickup",
-    pickup: "Collected",
-  },
-  {
-    id: "o3",
-    customer: "Achieng Otieno",
-    phone: "254733445566",
-    product: "Sukari F1 Tomato Seeds 10g",
-    items: [{ name: "Sukari F1 Tomato Seeds 10g", qty: 1, price: 2400 }],
-    date: "2026-07-19",
-    time: "08:30",
-    mpesaCode: "SGD1RT77MN",
-    amount: 2400,
-    status: "Satisfied",
-    channel: "in-app",
-    orderType: "Delivery",
-    pickup: "Collected",
-  },
-  {
-    id: "o4",
-    customer: "Musyoka Kimeu",
-    phone: "254701223344",
-    product: "Ridomil Gold MZ 250g",
-    items: [{ name: "Ridomil Gold MZ 250g", qty: 1, price: 1200 }],
-    date: "2026-07-28",
-    time: "09:14",
-    mpesaCode: "SGJ9PL44BV",
-    amount: 1200,
-    status: "Pending",
-    channel: "offline-sms",
-    orderType: "Counter Pickup",
-    pickup: "Awaiting Pickup",
-  },
-];
 
 const seedThreads: Thread[] = [
   {
@@ -322,8 +273,24 @@ type Ctx = {
   importProductsCsvFile: (file: File) => Promise<{ created: number }>;
   resetProducts: () => void;
   orders: CustomerOrder[];
-  setOrderStatus: (id: string, status: FollowUpStatus) => void;
-  setPickup: (id: string, pickup: CustomerOrder["pickup"]) => void;
+  ordersReady: boolean;
+  ordersLoading: boolean;
+  customers: PortalCustomer[];
+  customersReady: boolean;
+  customersLoading: boolean;
+  refreshOrders: () => Promise<CustomerOrder[]>;
+  resetOrders: () => void;
+  refreshCustomers: () => Promise<PortalCustomer[]>;
+  resetCustomers: () => void;
+  createOrderEntry: (body: unknown) => Promise<CustomerOrder>;
+  createCounterOrder: (input: {
+    phone: string;
+    productId: string;
+    customer?: string;
+  }) => Promise<{ order: CustomerOrder; channel: Channel }>;
+  setOrderStatus: (id: string, status: FollowUpStatus) => Promise<CustomerOrder>;
+  setPickup: (id: string, pickup: CustomerOrder["pickup"]) => Promise<CustomerOrder>;
+  upsertCustomerEntry: (input: { name: string; phone: string }) => Promise<PortalCustomer>;
   newOrderCount: number;
   clearNewOrders: () => void;
   threads: Thread[];
@@ -339,10 +306,6 @@ type Ctx = {
     topic: string,
     text: string,
   ) => void;
-  stkPush: (input: { phone: string; amount: number; product: string; customer?: string }) => {
-    channel: Channel;
-    code: string;
-  };
   lastIncoming: { thread: Thread; text: string; key: string } | null;
   soundOn: boolean;
   setSoundOn: (v: boolean) => void;
@@ -357,9 +320,14 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [productsReady, setProductsReady] = useState(false);
   const [productsLoading, setProductsLoading] = useState(false);
-  const [orders, setOrders] = useState<CustomerOrder[]>(seedOrders);
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [ordersReady, setOrdersReady] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [customers, setCustomers] = useState<PortalCustomer[]>([]);
+  const [customersReady, setCustomersReady] = useState(false);
+  const [customersLoading, setCustomersLoading] = useState(false);
   const [threads, setThreads] = useState<Thread[]>(seedThreads);
-  const [newOrderCount, setNewOrderCount] = useState(1);
+  const [newOrderCount, setNewOrderCount] = useState(0);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
 
@@ -368,6 +336,34 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       ? (raw.category as Category)
       : "Fertilizer";
     return { ...raw, category };
+  }, []);
+
+  const mapOrder = useCallback((raw: ReturnType<typeof apiOrderToOrder>): CustomerOrder => {
+    const channel: Channel = raw.channel === "offline-sms" ? "offline-sms" : "in-app";
+    const status: FollowUpStatus =
+      raw.status === "Contacted" || raw.status === "Satisfied" ? raw.status : "Pending";
+    const orderType: CustomerOrder["orderType"] =
+      raw.orderType === "Delivery" ? "Delivery" : "Counter Pickup";
+    const pickup: CustomerOrder["pickup"] =
+      raw.pickup === "Collected" || raw.pickup === "Awaiting Pickup" || raw.pickup === "Unmatched"
+        ? raw.pickup
+        : "Unmatched";
+    return {
+      id: raw.id,
+      customer: raw.customer,
+      customerId: raw.customerId,
+      phone: raw.phone,
+      product: raw.product,
+      items: raw.items,
+      date: raw.date,
+      time: raw.time,
+      mpesaCode: raw.mpesaCode,
+      amount: raw.amount,
+      status,
+      channel,
+      orderType,
+      pickup,
+    };
   }, []);
 
   const hydrateProfile = useCallback((p: Partial<StoreProfile> | StoreProfile) => {
@@ -522,16 +518,141 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     [refreshProducts],
   );
 
+  const resetOrders = useCallback(() => {
+    setOrders([]);
+    setOrdersReady(false);
+    setOrdersLoading(false);
+  }, []);
+
+  const refreshOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const list = await fetchOrders();
+      const next = list.map((row) => mapOrder(apiOrderToOrder(row)));
+      setOrders(next);
+      setOrdersReady(true);
+      return next;
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [mapOrder]);
+
+  const resetCustomers = useCallback(() => {
+    setCustomers([]);
+    setCustomersReady(false);
+    setCustomersLoading(false);
+  }, []);
+
+  const refreshCustomers = useCallback(async () => {
+    setCustomersLoading(true);
+    try {
+      const list = await fetchCustomers();
+      const next = list.map(apiCustomerToCustomer);
+      setCustomers(next);
+      setCustomersReady(true);
+      return next;
+    } finally {
+      setCustomersLoading(false);
+    }
+  }, []);
+
+  const createOrderEntry = useCallback(
+    async (body: unknown) => {
+      const created = mapOrder(apiOrderToOrder(await createOrderApi(body)));
+      setOrders((prev) => [created, ...prev]);
+      setOrdersReady(true);
+      setNewOrderCount((n) => n + 1);
+      return created;
+    },
+    [mapOrder],
+  );
+
+  const upsertCustomerEntry = useCallback(async (input: { name: string; phone: string }) => {
+    const saved = apiCustomerToCustomer(await upsertCustomer(input));
+    setCustomers((prev) => {
+      const without = prev.filter((c) => c.id !== saved.id && c.phone !== saved.phone);
+      return [saved, ...without];
+    });
+    setCustomersReady(true);
+    return saved;
+  }, []);
+
   const setOrderStatus = useCallback(
-    (id: string, status: FollowUpStatus) =>
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o))),
-    [],
+    async (id: string, status: FollowUpStatus) => {
+      let previous: FollowUpStatus = "Pending";
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          previous = o.status;
+          return { ...o, status };
+        }),
+      );
+      try {
+        const updated = mapOrder(apiOrderToOrder(await patchOrder(id, { status })));
+        setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshOrders();
+          throw new ApiError("This order no longer exists.", 404, err.body);
+        }
+        setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: previous } : o)));
+        throw err;
+      }
+    },
+    [mapOrder, refreshOrders],
   );
 
   const setPickup = useCallback(
-    (id: string, pickup: CustomerOrder["pickup"]) =>
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, pickup } : o))),
-    [],
+    async (id: string, pickup: CustomerOrder["pickup"]) => {
+      let previous: CustomerOrder["pickup"] = "Unmatched";
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          previous = o.pickup;
+          return { ...o, pickup };
+        }),
+      );
+      try {
+        const updated = mapOrder(apiOrderToOrder(await patchOrder(id, { pickup })));
+        setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshOrders();
+          throw new ApiError("This order no longer exists.", 404, err.body);
+        }
+        setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, pickup: previous } : o)));
+        throw err;
+      }
+    },
+    [mapOrder, refreshOrders],
+  );
+
+  const createCounterOrder = useCallback(
+    async (input: { phone: string; productId: string; customer?: string }) => {
+      const product = products.find((p) => p.id === input.productId);
+      if (!product) {
+        throw new ApiError("Select a product from inventory.", 400, null);
+      }
+      const normalized = input.phone.replace(/\D/g, "").replace(/^0/, "254");
+      const known =
+        orders.find((o) => o.phone === normalized) ||
+        customers.find((c) => c.phone === normalized) ||
+        threads.find((t) => t.phone === normalized);
+      const channel: Channel = known ? "in-app" : "offline-sms";
+      const body = buildCounterOrderBody({
+        productId: Number(product.id),
+        productPrice: product.price,
+        phone: normalized,
+        customerName: input.customer,
+        channel,
+      });
+      const order = await createOrderEntry(body);
+      void refreshCustomers().catch(() => undefined);
+      return { order, channel };
+    },
+    [products, orders, customers, threads, createOrderEntry, refreshCustomers],
   );
 
   const markRead = useCallback(
@@ -590,41 +711,6 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       });
     },
     [],
-  );
-
-  const stkPush = useCallback<Ctx["stkPush"]>(
-    ({ phone, amount, product, customer }) => {
-      const normalized = phone.replace(/\D/g, "").replace(/^0/, "254");
-      const known =
-        orders.find((o) => o.phone === normalized) ?? threads.find((t) => t.phone === normalized);
-      const channel: Channel = known ? "in-app" : "offline-sms";
-      const code = "SG" + uid().toUpperCase().slice(0, 8);
-      const d = new Date();
-      setOrders((prev) => [
-        {
-          id: uid(),
-          customer:
-            customer?.trim() ||
-            (known && "farmer" in known ? known.farmer : known?.customer) ||
-            "Counter Customer",
-          phone: normalized,
-          product,
-          items: [{ name: product, qty: 1, price: amount }],
-          date: d.toISOString().slice(0, 10),
-          time: nowTime(),
-          mpesaCode: code,
-          amount,
-          status: "Pending",
-          channel,
-          orderType: "Counter Pickup",
-          pickup: "Awaiting Pickup",
-        },
-        ...prev,
-      ]);
-      setNewOrderCount((n) => n + 1);
-      return { channel, code };
-    },
-    [orders, threads],
   );
 
   const enablePush = useCallback(() => {
@@ -708,8 +794,20 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       importProductsCsvFile,
       resetProducts,
       orders,
+      ordersReady,
+      ordersLoading,
+      customers,
+      customersReady,
+      customersLoading,
+      refreshOrders,
+      resetOrders,
+      refreshCustomers,
+      resetCustomers,
+      createOrderEntry,
+      createCounterOrder,
       setOrderStatus,
       setPickup,
+      upsertCustomerEntry,
       newOrderCount,
       clearNewOrders: () => setNewOrderCount(0),
       threads,
@@ -719,7 +817,6 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       markRead,
       sendMessage,
       startThread,
-      stkPush,
       lastIncoming: incoming,
       soundOn,
       setSoundOn,
@@ -744,8 +841,20 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       importProductsCsvFile,
       resetProducts,
       orders,
+      ordersReady,
+      ordersLoading,
+      customers,
+      customersReady,
+      customersLoading,
+      refreshOrders,
+      resetOrders,
+      refreshCustomers,
+      resetCustomers,
+      createOrderEntry,
+      createCounterOrder,
       setOrderStatus,
       setPickup,
+      upsertCustomerEntry,
       newOrderCount,
       threads,
       unreadMessages,
@@ -754,7 +863,6 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       markRead,
       sendMessage,
       startThread,
-      stkPush,
       incoming,
       soundOn,
       enablePush,

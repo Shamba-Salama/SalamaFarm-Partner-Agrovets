@@ -39,6 +39,8 @@ import {
   type CustomerOrder,
   type FollowUpStatus,
 } from "@/lib/portal-store";
+import { ApiError } from "@/lib/api-client";
+import { formatApiError } from "@/lib/format-api-error";
 
 export const Route = createFileRoute("/customers")({
   head: () => ({
@@ -64,9 +66,10 @@ export const Route = createFileRoute("/customers")({
 const statuses: FollowUpStatus[] = ["Pending", "Contacted", "Satisfied"];
 
 function CustomersPage() {
-  const { orders, setOrderStatus } = usePortal();
+  const { orders, ordersLoading, setOrderStatus } = usePortal();
   const [query, setQuery] = useState("");
   const [target, setTarget] = useState<CustomerOrder | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const rows = orders.filter(
     (o) =>
@@ -74,6 +77,22 @@ function CustomersPage() {
       o.phone.includes(query) ||
       o.product.toLowerCase().includes(query.toLowerCase()),
   );
+
+  const filtersActive = query.trim().length > 0;
+
+  const onStatusChange = async (id: string, status: FollowUpStatus) => {
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      await setOrderStatus(id, status);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? formatApiError(err) : "Could not update follow-up status.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <PortalLayout
@@ -106,48 +125,64 @@ function CustomersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="min-w-[150px]">
-                      <span className="block font-medium">{o.customer}</span>
-                      <span className="block text-xs text-muted-foreground">+{o.phone}</span>
-                    </TableCell>
-                    <TableCell className="min-w-[170px]">{o.product}</TableCell>
-                    <TableCell className="whitespace-nowrap text-muted-foreground">{o.date}</TableCell>
-                    <TableCell className="whitespace-nowrap">{o.orderType}</TableCell>
-                    <TableCell>
-                      <ChannelBadge channel={o.channel} />
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={o.status}
-                        onValueChange={(v) => setOrderStatus(o.id, v as FollowUpStatus)}
-                      >
-                        <SelectTrigger className="w-[130px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {statuses.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button size="sm" onClick={() => setTarget(o)}>
-                        <Send className="mr-1.5 h-4 w-4" /> Send Follow-Up
-                      </Button>
+                {ordersLoading && orders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                      Loading customers…
                     </TableCell>
                   </TableRow>
-                ))}
-                {rows.length === 0 && (
+                ) : rows.length === 0 && orders.length === 0 && !filtersActive ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                      No customers yet
+                    </TableCell>
+                  </TableRow>
+                ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                       No customers match your search.
                     </TableCell>
                   </TableRow>
+                ) : (
+                  rows.map((o) => (
+                    <TableRow key={o.id}>
+                      <TableCell className="min-w-[150px]">
+                        <span className="block font-medium">{o.customer}</span>
+                        <span className="block text-xs text-muted-foreground">+{o.phone}</span>
+                      </TableCell>
+                      <TableCell className="min-w-[170px]">{o.product}</TableCell>
+                      <TableCell className="whitespace-nowrap text-muted-foreground">
+                        {o.date}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{o.orderType}</TableCell>
+                      <TableCell>
+                        <ChannelBadge channel={o.channel} />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={o.status}
+                          disabled={busyId === o.id}
+                          onValueChange={(v) => void onStatusChange(o.id, v as FollowUpStatus)}
+                        >
+                          <SelectTrigger className="w-[130px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {statuses.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" onClick={() => setTarget(o)}>
+                          <Send className="mr-1.5 h-4 w-4" /> Send Follow-Up
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -165,6 +200,7 @@ function FollowUpDialog({ order, onClose }: { order: CustomerOrder | null; onClo
   const [templateId, setTemplateId] = useState<string>(FOLLOW_UP_TEMPLATES[0].id);
   const template = FOLLOW_UP_TEMPLATES.find((t) => t.id === templateId) ?? FOLLOW_UP_TEMPLATES[0];
   const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
 
   const text = body || (order ? template.body(order.customer, order.product) : "");
 
@@ -177,12 +213,17 @@ function FollowUpDialog({ order, onClose }: { order: CustomerOrder | null; onClo
               <DialogTitle>Send follow-up to {order.customer}</DialogTitle>
               <DialogDescription>
                 {order.channel === "in-app"
-                  ? "Delivers as an in-app push message."
-                  : "This number is offline — routed via the SalamaFarm Bulk SMS Gateway."}
+                  ? "Marks follow-up status on the order. Message delivery is not yet wired to the API."
+                  : "Marks follow-up status on the order. Bulk SMS delivery is not yet wired to the API."}
               </DialogDescription>
             </DialogHeader>
 
             <ChannelBadge channel={order.channel} />
+
+            <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              <strong className="text-foreground">Known gap:</strong> chat/SMS delivery stays local
+              until the messaging pass. Status update to Contacted is a real API PATCH.
+            </p>
 
             <div className="space-y-1.5">
               <Label>Template</Label>
@@ -214,19 +255,31 @@ function FollowUpDialog({ order, onClose }: { order: CustomerOrder | null; onClo
             <DialogFooter>
               <Button
                 className="w-full"
+                disabled={sending}
                 onClick={() => {
-                  startThread(order.customer, order.phone, order.channel, order.product, text);
-                  setOrderStatus(order.id, "Contacted");
-                  onClose();
-                  setBody("");
-                  toast.success(
-                    order.channel === "in-app"
-                      ? "Follow-up delivered in-app"
-                      : "Follow-up queued on the Bulk SMS Gateway",
-                  );
+                  void (async () => {
+                    setSending(true);
+                    try {
+                      startThread(order.customer, order.phone, order.channel, order.product, text);
+                      await setOrderStatus(order.id, "Contacted");
+                      onClose();
+                      setBody("");
+                      toast.success(
+                        order.channel === "in-app"
+                          ? "Status updated · message kept local (messaging API not wired yet)"
+                          : "Status updated · SMS kept local (messaging API not wired yet)",
+                      );
+                    } catch (err) {
+                      toast.error(
+                        err instanceof ApiError ? formatApiError(err) : "Could not update status.",
+                      );
+                    } finally {
+                      setSending(false);
+                    }
+                  })();
                 }}
               >
-                <Send className="mr-1.5 h-4 w-4" /> Send follow-up
+                <Send className="mr-1.5 h-4 w-4" /> {sending ? "Saving…" : "Send follow-up"}
               </Button>
             </DialogFooter>
           </>

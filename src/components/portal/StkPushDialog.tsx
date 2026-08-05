@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatKES, usePortal } from "@/lib/portal-store";
+import { ApiError } from "@/lib/api-client";
+import { formatApiError } from "@/lib/format-api-error";
 
 export function StkPushDialog({
   open,
@@ -29,21 +31,22 @@ export function StkPushDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const { products, stkPush } = usePortal();
+  const { products, createCounterOrder } = usePortal();
   const [phone, setPhone] = useState("");
   const [customer, setCustomer] = useState("");
-  const [productId, setProductId] = useState<string>("custom");
-  const [custom, setCustom] = useState("");
+  const [productId, setProductId] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
 
   const selected = products.find((p) => p.id === productId);
-  const amount = selected ? selected.price : Number(custom || 0);
-  const valid = /^(0|254)\d{8,11}$/.test(phone.replace(/\s/g, "")) && amount > 0;
+  const amount = selected ? selected.price : 0;
+  const valid =
+    /^(0|254)\d{8,11}$/.test(phone.replace(/\s/g, "")) && Boolean(selected) && amount > 0;
 
   const reset = () => {
     setPhone("");
     setCustomer("");
-    setProductId("custom");
-    setCustom("");
+    setProductId("");
+    setSubmitting(false);
   };
 
   return (
@@ -58,7 +61,8 @@ export function StkPushDialog({
         <DialogHeader>
           <DialogTitle>Counter M-Pesa STK Push</DialogTitle>
           <DialogDescription>
-            Send a payment prompt straight to the farmer&apos;s phone at the counter.
+            Create a counter order against a catalog product. Payment charging is Pass 4B — this
+            records the unpaid order only.
           </DialogDescription>
         </DialogHeader>
 
@@ -82,31 +86,28 @@ export function StkPushDialog({
           </div>
           <div className="space-y-1.5">
             <Label>Product from inventory</Label>
-            <Select value={productId} onValueChange={setProductId}>
+            <Select value={productId || undefined} onValueChange={setProductId}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Select a product" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="custom">Custom amount…</SelectItem>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} — {formatKES(p.price)}
-                  </SelectItem>
-                ))}
+                <SelectItem value="custom" disabled>
+                  Custom amount… (unavailable — needs a catalog product)
+                </SelectItem>
+                {products
+                  .filter((p) => p.active)
+                  .map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} — {formatKES(p.price)}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Custom amounts have no backend representation (`items` require a real product_id).
+              Pick a product from inventory.
+            </p>
           </div>
-          {!selected && (
-            <div className="space-y-1.5">
-              <Label>Custom amount (KES)</Label>
-              <Input
-                type="number"
-                value={custom}
-                onChange={(e) => setCustom(e.target.value)}
-                placeholder="1500"
-              />
-            </div>
-          )}
 
           <div className="rounded-xl bg-muted p-3 text-sm">
             <span className="text-muted-foreground">Amount to request</span>
@@ -117,25 +118,37 @@ export function StkPushDialog({
         <DialogFooter>
           <Button
             className="w-full"
-            disabled={!valid}
+            disabled={!valid || submitting}
             onClick={() => {
-              const { channel, code } = stkPush({
-                phone,
-                amount,
-                product: selected?.name ?? "Counter sale",
-                customer,
-              });
-              onOpenChange(false);
-              reset();
-              toast.success(`STK push sent · ${code}`, {
-                description:
-                  channel === "offline-sms"
-                    ? "Number not on the app — tagged Offline/SMS. Follow-ups route through the Bulk SMS Gateway."
-                    : "Farmer has an active SalamaFarm account — follow-ups deliver in-app.",
-              });
+              void (async () => {
+                if (!selected) return;
+                setSubmitting(true);
+                try {
+                  const { order, channel } = await createCounterOrder({
+                    phone,
+                    productId: selected.id,
+                    customer,
+                  });
+                  onOpenChange(false);
+                  reset();
+                  toast.success(`Order #${order.id} created`, {
+                    description:
+                      channel === "offline-sms"
+                        ? "Number not seen before — tagged Offline/SMS for follow-ups."
+                        : "Phone already known — follow-ups tagged in-app.",
+                  });
+                } catch (err) {
+                  toast.error(
+                    err instanceof ApiError ? formatApiError(err) : "Could not create order.",
+                  );
+                } finally {
+                  setSubmitting(false);
+                }
+              })();
             }}
           >
-            <Smartphone className="mr-1.5 h-4 w-4" /> Trigger M-Pesa STK Push
+            <Smartphone className="mr-1.5 h-4 w-4" />{" "}
+            {submitting ? "Creating order…" : "Create counter order"}
           </Button>
         </DialogFooter>
       </DialogContent>
