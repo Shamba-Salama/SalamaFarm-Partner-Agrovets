@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { CheckCircle2, FileText, Search, ShieldCheck } from "lucide-react";
+import { CheckCircle2, FileText, RefreshCw, Search, ShieldCheck, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 
 import { PortalLayout } from "@/components/portal/PortalLayout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +27,7 @@ import { ChannelBadge } from "@/components/portal/ChatDrawer";
 import { formatKES, usePortal, VAT_RATE, type CustomerOrder } from "@/lib/portal-store";
 import { ApiError } from "@/lib/api-client";
 import { formatApiError } from "@/lib/format-api-error";
+import { normalizeKenyaMsisdn } from "@/lib/payments-api";
 import { printReceipt } from "@/lib/export";
 import { cn } from "@/lib/utils";
 
@@ -50,11 +52,56 @@ export const Route = createFileRoute("/orders")({
   component: OrdersPage,
 });
 
+function formatPaidAt(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
+}
+
+function chargeFailureToast(err: unknown): void {
+  if (!(err instanceof ApiError)) {
+    toast.error("Could not initiate charge.");
+    return;
+  }
+  const detail = formatApiError(err);
+  if (err.status === 400) {
+    toast.error("Charge could not start", {
+      description: detail || "Check the phone number, subaccount, and order amount.",
+    });
+    return;
+  }
+  if (err.status === 404) {
+    toast.error("Order not found", {
+      description: detail || "This order no longer exists for your store.",
+    });
+    return;
+  }
+  if (err.status === 502) {
+    toast.error("Paystack unreachable", {
+      description:
+        detail ||
+        "Paystack rejected or could not be reached. The charge was not initiated — try again later.",
+    });
+    return;
+  }
+  toast.error(detail || "Could not initiate charge.");
+}
+
 function OrdersPage() {
-  const { orders, ordersLoading, profile, setPickup, clearNewOrders } = usePortal();
+  const {
+    orders,
+    ordersLoading,
+    profile,
+    setPickup,
+    clearNewOrders,
+    refreshOrders,
+    chargeCounterOrder,
+  } = usePortal();
   const [verify, setVerify] = useState("");
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [chargingId, setChargingId] = useState<string | null>(null);
+  const [refreshingPayments, setRefreshingPayments] = useState(false);
 
   const match = verify.trim()
     ? orders.find((o) => o.mpesaCode.toLowerCase() === verify.trim().toLowerCase())
@@ -88,14 +135,66 @@ function OrdersPage() {
     await onPickupChange(id, "Collected");
   };
 
+  const onRefreshPayments = async () => {
+    setRefreshingPayments(true);
+    try {
+      await refreshOrders();
+      toast.success("Payment status refreshed");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? formatApiError(err) : "Could not refresh orders.");
+    } finally {
+      setRefreshingPayments(false);
+    }
+  };
+
+  const onCharge = async (o: CustomerOrder) => {
+    if (o.paidAt || chargingId) return;
+    const e164 = normalizeKenyaMsisdn(o.phone);
+    if (!e164) {
+      toast.error("Invalid phone on this order", {
+        description: "Use 07XXXXXXXX or +2547XXXXXXXX before charging.",
+      });
+      return;
+    }
+    if (!profile.paystackSubaccountCode?.trim()) {
+      toast.error("Paystack subaccount required", {
+        description: "Create a subaccount from the STK Push dialog before charging.",
+      });
+      return;
+    }
+    setChargingId(o.id);
+    try {
+      const res = await chargeCounterOrder({ orderId: o.id, phone: e164 });
+      const text =
+        res.display_text?.trim() ||
+        `Charge started (${res.status ?? "pending"}). Reference ${res.reference}.`;
+      toast.message("STK prompt sent — awaiting confirmation", { description: text });
+    } catch (err) {
+      chargeFailureToast(err);
+    } finally {
+      setChargingId(null);
+    }
+  };
+
   return (
     <PortalLayout
       title="Sales, Orders & M-Pesa Log"
       subtitle={`${orders.length} recorded transactions`}
       actions={
-        <Button size="sm" variant="ghost" onClick={clearNewOrders}>
-          Mark orders seen
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={refreshingPayments}
+            onClick={() => void onRefreshPayments()}
+          >
+            <RefreshCw className={cn("mr-1.5 h-4 w-4", refreshingPayments && "animate-spin")} />
+            Refresh payment status
+          </Button>
+          <Button size="sm" variant="ghost" onClick={clearNewOrders}>
+            Mark orders seen
+          </Button>
+        </div>
       }
     >
       <Card>
@@ -171,27 +270,28 @@ function OrdersPage() {
                   <TableHead>Items</TableHead>
                   <TableHead>Channel</TableHead>
                   <TableHead className="text-right">Total (incl. VAT)</TableHead>
+                  <TableHead>Payment</TableHead>
                   <TableHead>Timestamp</TableHead>
                   <TableHead>Pickup</TableHead>
-                  <TableHead className="text-right">Receipt</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {ordersLoading && orders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       Loading orders…
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 && orders.length === 0 && !filtersActive ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       No orders yet
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       No transactions match your search.
                     </TableCell>
                   </TableRow>
@@ -214,6 +314,18 @@ function OrdersPage() {
                         <span className="block text-[11px] text-muted-foreground">
                           VAT {formatKES(Math.round(o.amount - o.amount / (1 + VAT_RATE)))}
                         </span>
+                      </TableCell>
+                      <TableCell className="min-w-[140px]">
+                        {o.paidAt ? (
+                          <div>
+                            <Badge variant="secondary">Paid</Badge>
+                            <span className="mt-1 block text-[11px] text-muted-foreground">
+                              {formatPaidAt(o.paidAt)}
+                            </span>
+                          </div>
+                        ) : (
+                          <Badge variant="outline">Awaiting payment</Badge>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                         {o.date} {o.time}
@@ -239,16 +351,29 @@ function OrdersPage() {
                         </Select>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const ok = printReceipt(o, profile);
-                            if (!ok) toast.error("Allow pop-ups to download the receipt");
-                          }}
-                        >
-                          <FileText className="mr-1.5 h-4 w-4" /> Receipt
-                        </Button>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {o.paidAt === null && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={chargingId !== null}
+                              onClick={() => void onCharge(o)}
+                            >
+                              <Smartphone className="mr-1.5 h-4 w-4" />
+                              {chargingId === o.id ? "Sending…" : "Charge"}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const ok = printReceipt(o, profile);
+                              if (!ok) toast.error("Allow pop-ups to download the receipt");
+                            }}
+                          >
+                            <FileText className="mr-1.5 h-4 w-4" /> Receipt
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -36,7 +37,13 @@ import {
   upsertCustomer,
   type PortalCustomer,
 } from "@/lib/crm-api";
+import { fetchWeeklySales, type WeeklySalesRow } from "@/lib/analytics-api";
+import { chargeOrder, createSubaccount, type ChargeResponse } from "@/lib/payments-api";
 import { ApiError } from "@/lib/api-client";
+
+export type { WeeklySalesRow } from "@/lib/analytics-api";
+export type { ChargeResponse } from "@/lib/payments-api";
+export { prepareWeeklySalesChartRows } from "@/lib/analytics-api";
 
 export type { ApiStore, StoreProfile } from "@/lib/store-api";
 export { emptyStoreProfile } from "@/lib/store-api";
@@ -81,6 +88,7 @@ export type CustomerOrder = {
   channel: Channel;
   orderType: "Counter Pickup" | "Delivery";
   pickup: "Collected" | "Awaiting Pickup" | "Unmatched";
+  paidAt: string | null;
 };
 
 export type ChatMessage = {
@@ -177,15 +185,6 @@ const inquiryLines = [
   "Do you have stock today? I can come to the counter this evening.",
   "How much should I dilute per 20 litre knapsack?",
   "Can you deliver to my farm this week?",
-];
-
-export const weeklySales = [
-  { week: "Wk 22", Fertilizer: 42000, Seeds: 18000, "Vet Supplies": 21000, Pesticides: 12000 },
-  { week: "Wk 23", Fertilizer: 51000, Seeds: 22500, "Vet Supplies": 17800, Pesticides: 15400 },
-  { week: "Wk 24", Fertilizer: 38500, Seeds: 30100, "Vet Supplies": 24200, Pesticides: 11200 },
-  { week: "Wk 25", Fertilizer: 61200, Seeds: 27400, "Vet Supplies": 19600, Pesticides: 18900 },
-  { week: "Wk 26", Fertilizer: 47800, Seeds: 33800, "Vet Supplies": 28100, Pesticides: 14300 },
-  { week: "Wk 27", Fertilizer: 72400, Seeds: 29900, "Vet Supplies": 31500, Pesticides: 20600 },
 ];
 
 export function daysUntil(dateStr: string | null): number | null {
@@ -288,6 +287,18 @@ type Ctx = {
     productId: string;
     customer?: string;
   }) => Promise<{ order: CustomerOrder; channel: Channel }>;
+  /** Initiate Paystack STK for an unpaid order. Does not mark paid locally. */
+  chargeCounterOrder: (input: { orderId: string; phone: string }) => Promise<ChargeResponse>;
+  createStoreSubaccount: () => Promise<{
+    created: boolean;
+    subaccountCode: string;
+    profile: StoreProfile;
+  }>;
+  weeklySales: WeeklySalesRow[];
+  weeklySalesReady: boolean;
+  weeklySalesLoading: boolean;
+  refreshWeeklySales: () => Promise<WeeklySalesRow[]>;
+  resetWeeklySales: () => void;
   setOrderStatus: (id: string, status: FollowUpStatus) => Promise<CustomerOrder>;
   setPickup: (id: string, pickup: CustomerOrder["pickup"]) => Promise<CustomerOrder>;
   upsertCustomerEntry: (input: { name: string; phone: string }) => Promise<PortalCustomer>;
@@ -326,10 +337,14 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [customers, setCustomers] = useState<PortalCustomer[]>([]);
   const [customersReady, setCustomersReady] = useState(false);
   const [customersLoading, setCustomersLoading] = useState(false);
+  const [weeklySales, setWeeklySales] = useState<WeeklySalesRow[]>([]);
+  const [weeklySalesReady, setWeeklySalesReady] = useState(false);
+  const [weeklySalesLoading, setWeeklySalesLoading] = useState(false);
   const [threads, setThreads] = useState<Thread[]>(seedThreads);
   const [newOrderCount, setNewOrderCount] = useState(0);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+  const chargingOrderIds = useRef(new Set<string>());
 
   const mapProduct = useCallback((raw: ReturnType<typeof apiProductToProduct>): Product => {
     const category = CATEGORIES.includes(raw.category as Category)
@@ -363,6 +378,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       channel,
       orderType,
       pickup,
+      paidAt: raw.paidAt ?? null,
     };
   }, []);
 
@@ -655,6 +671,49 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     [products, orders, customers, threads, createOrderEntry, refreshCustomers],
   );
 
+  const chargeCounterOrder = useCallback(async (input: { orderId: string; phone: string }) => {
+    const id = input.orderId;
+    if (chargingOrderIds.current.has(id)) {
+      throw new ApiError("A charge is already in progress for this order.", 409, null);
+    }
+    chargingOrderIds.current.add(id);
+    try {
+      return await chargeOrder({ orderId: id, phone: input.phone });
+    } finally {
+      chargingOrderIds.current.delete(id);
+    }
+  }, []);
+
+  const createStoreSubaccount = useCallback(async () => {
+    const res = await createSubaccount();
+    const next = apiStoreToProfile(res.store);
+    setProfileState(next);
+    setStoreReady(true);
+    return {
+      created: res.created,
+      subaccountCode: res.subaccount_code,
+      profile: next,
+    };
+  }, []);
+
+  const resetWeeklySales = useCallback(() => {
+    setWeeklySales([]);
+    setWeeklySalesReady(false);
+    setWeeklySalesLoading(false);
+  }, []);
+
+  const refreshWeeklySales = useCallback(async () => {
+    setWeeklySalesLoading(true);
+    try {
+      const list = await fetchWeeklySales();
+      setWeeklySales(list);
+      setWeeklySalesReady(true);
+      return list;
+    } finally {
+      setWeeklySalesLoading(false);
+    }
+  }, []);
+
   const markRead = useCallback(
     (id: string) => setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t))),
     [],
@@ -805,6 +864,13 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       resetCustomers,
       createOrderEntry,
       createCounterOrder,
+      chargeCounterOrder,
+      createStoreSubaccount,
+      weeklySales,
+      weeklySalesReady,
+      weeklySalesLoading,
+      refreshWeeklySales,
+      resetWeeklySales,
       setOrderStatus,
       setPickup,
       upsertCustomerEntry,
@@ -852,6 +918,13 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       resetCustomers,
       createOrderEntry,
       createCounterOrder,
+      chargeCounterOrder,
+      createStoreSubaccount,
+      weeklySales,
+      weeklySalesReady,
+      weeklySalesLoading,
+      refreshWeeklySales,
+      resetWeeklySales,
       setOrderStatus,
       setPickup,
       upsertCustomerEntry,

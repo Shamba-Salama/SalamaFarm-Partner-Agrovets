@@ -65,6 +65,7 @@ export type MappedOrder = {
   channel: string;
   orderType: string;
   pickup: string;
+  paidAt: string | null;
 };
 
 /** Integer cents helpers — avoid float money strings that fail DRF decimal_places=2. */
@@ -91,6 +92,7 @@ export function apiOrderToOrder(o: ApiOrder): MappedOrder {
     channel: o.channel,
     orderType: o.order_type,
     pickup: o.pickup,
+    paidAt: o.paid_at ?? null,
   };
 }
 

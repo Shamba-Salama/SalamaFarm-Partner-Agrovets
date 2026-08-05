@@ -22,6 +22,8 @@ export type StoreProfile = {
   county: string;
   till: string;
   attendantPhone: string;
+  /** Server-managed Paystack subaccount; never PATCH from the client. */
+  paystackSubaccountCode: string;
   open: boolean;
   onboarded: boolean;
 };
@@ -32,6 +34,7 @@ export const emptyStoreProfile = (): StoreProfile => ({
   county: "",
   till: "",
   attendantPhone: "",
+  paystackSubaccountCode: "",
   open: true,
   onboarded: false,
 });
@@ -43,6 +46,7 @@ export function apiStoreToProfile(store: ApiStore): StoreProfile {
     county: store.county ?? "",
     till: store.till ?? "",
     attendantPhone: store.attendant_phone ?? "",
+    paystackSubaccountCode: store.paystack_subaccount_code ?? "",
     open: Boolean(store.open),
     onboarded: Boolean(store.onboarded),
   };
