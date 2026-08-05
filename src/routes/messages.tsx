@@ -30,44 +30,58 @@ export const Route = createFileRoute("/messages")({
 });
 
 function MessagesPage() {
-  const { threads, openChat, unreadMessages } = usePortal();
+  const { threads, threadsLoading, threadsReady, openChat, unreadMessages } = usePortal();
 
   return (
     <PortalLayout
       title="Farmer Messages"
       subtitle={`${threads.length} conversations · ${unreadMessages} unread`}
     >
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {threads.map((t) => {
-          const last = t.messages[t.messages.length - 1];
-          return (
-            <Card key={t.id} className={cn(t.unread > 0 && "ring-2 ring-primary/40")}>
-              <CardContent className="space-y-2 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold">{t.farmer}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      +{t.phone} · {t.topic}
-                    </p>
+      {threadsLoading && !threadsReady ? (
+        <p className="py-16 text-center text-sm text-muted-foreground">Loading conversations…</p>
+      ) : threads.length === 0 ? (
+        <p className="py-16 text-center text-sm text-muted-foreground">No conversations yet</p>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {threads.map((t) => {
+            const last = t.lastMessage;
+            return (
+              <Card key={t.id} className={cn(t.unread > 0 && "ring-2 ring-primary/40")}>
+                <CardContent className="space-y-2 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{t.farmer}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        +{t.phone} · {t.topic}
+                      </p>
+                    </div>
+                    {t.unread > 0 && (
+                      <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+                        {t.unread}
+                      </span>
+                    )}
                   </div>
-                  {t.unread > 0 && (
-                    <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
-                      {t.unread}
-                    </span>
-                  )}
-                </div>
-                <ChannelBadge channel={t.channel} />
-                <p className="line-clamp-2 text-sm text-muted-foreground">
-                  {last ? `${last.from === "store" ? "You: " : ""}${last.text}` : "No messages yet"}
-                </p>
-                <Button size="sm" className="w-full" onClick={() => openChat(t.id)}>
-                  <MessageSquareText className="mr-1.5 h-4 w-4" /> Open chat
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                  <ChannelBadge channel={t.channel} />
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {last
+                      ? `${last.from === "store" ? "You: " : ""}${last.text}`
+                      : "No messages yet"}
+                  </p>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      void openChat(t.id);
+                    }}
+                  >
+                    <MessageSquareText className="mr-1.5 h-4 w-4" /> Open chat
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </PortalLayout>
   );
 }

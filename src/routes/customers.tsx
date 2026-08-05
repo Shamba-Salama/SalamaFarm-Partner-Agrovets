@@ -213,17 +213,12 @@ function FollowUpDialog({ order, onClose }: { order: CustomerOrder | null; onClo
               <DialogTitle>Send follow-up to {order.customer}</DialogTitle>
               <DialogDescription>
                 {order.channel === "in-app"
-                  ? "Marks follow-up status on the order. Message delivery is not yet wired to the API."
-                  : "Marks follow-up status on the order. Bulk SMS delivery is not yet wired to the API."}
+                  ? "Posts the message to this farmer’s in-app conversation and marks the order Contacted."
+                  : "Records the message on an offline-SMS thread (no SMS gateway — delivery is not transmitted) and marks the order Contacted."}
               </DialogDescription>
             </DialogHeader>
 
             <ChannelBadge channel={order.channel} />
-
-            <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              <strong className="text-foreground">Known gap:</strong> chat/SMS delivery stays local
-              until the messaging pass. Status update to Contacted is a real API PATCH.
-            </p>
 
             <div className="space-y-1.5">
               <Label>Template</Label>
@@ -260,18 +255,25 @@ function FollowUpDialog({ order, onClose }: { order: CustomerOrder | null; onClo
                   void (async () => {
                     setSending(true);
                     try {
-                      startThread(order.customer, order.phone, order.channel, order.product, text);
+                      await startThread({
+                        customerId: order.customerId,
+                        name: order.customer,
+                        phone: order.phone,
+                        channel: order.channel,
+                        topic: order.product,
+                        text,
+                      });
                       await setOrderStatus(order.id, "Contacted");
                       onClose();
                       setBody("");
                       toast.success(
                         order.channel === "in-app"
-                          ? "Status updated · message kept local (messaging API not wired yet)"
-                          : "Status updated · SMS kept local (messaging API not wired yet)",
+                          ? "Follow-up posted to conversation · status Contacted"
+                          : "Follow-up recorded on offline-SMS thread · status Contacted (no SMS sent)",
                       );
                     } catch (err) {
                       toast.error(
-                        err instanceof ApiError ? formatApiError(err) : "Could not update status.",
+                        err instanceof ApiError ? formatApiError(err) : "Could not send follow-up.",
                       );
                     } finally {
                       setSending(false);
@@ -279,7 +281,7 @@ function FollowUpDialog({ order, onClose }: { order: CustomerOrder | null; onClo
                   })();
                 }}
               >
-                <Send className="mr-1.5 h-4 w-4" /> {sending ? "Saving…" : "Send follow-up"}
+                <Send className="mr-1.5 h-4 w-4" /> {sending ? "Sending…" : "Send follow-up"}
               </Button>
             </DialogFooter>
           </>

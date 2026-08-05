@@ -39,7 +39,17 @@ import {
 } from "@/lib/crm-api";
 import { fetchWeeklySales, type WeeklySalesRow } from "@/lib/analytics-api";
 import { chargeOrder, createSubaccount, type ChargeResponse } from "@/lib/payments-api";
+import {
+  apiMessageToMessage,
+  apiThreadToThread,
+  createThread as createThreadApi,
+  fetchThreadDetail,
+  fetchThreads,
+  markThreadRead,
+  postThreadMessage,
+} from "@/lib/messaging-api";
 import { ApiError } from "@/lib/api-client";
+import { getAccessToken } from "@/lib/auth-storage";
 
 export type { WeeklySalesRow } from "@/lib/analytics-api";
 export type { ChargeResponse } from "@/lib/payments-api";
@@ -96,16 +106,21 @@ export type ChatMessage = {
   from: "farmer" | "store";
   text: string;
   time: string;
+  createdAt: string;
 };
 
 export type Thread = {
   id: string;
   farmer: string;
+  customerId: string;
   phone: string;
   channel: Channel;
   topic: string;
   unread: number;
+  lastMessage: ChatMessage | null;
   messages: ChatMessage[];
+  messagesLoaded: boolean;
+  updatedAt: string;
 };
 
 export const FOLLOW_UP_TEMPLATES = [
@@ -134,58 +149,6 @@ export const FOLLOW_UP_TEMPLATES = [
       `Habari ${c}! Planting season is here and ${item} is back in stock at a partner price. Reply to reserve yours.`,
   },
 ] as const;
-
-const seedThreads: Thread[] = [
-  {
-    id: "th1",
-    farmer: "Wanjiku Mwangi",
-    phone: "254712345678",
-    channel: "in-app",
-    topic: "Maize leaf yellowing",
-    unread: 2,
-    messages: [
-      {
-        id: "m1",
-        from: "farmer",
-        text: "Habari, my maize leaves are turning yellow from the bottom. Which fertilizer should I add?",
-        time: "08:12",
-      },
-      { id: "m2", from: "farmer", text: "The crop is 6 weeks old.", time: "08:13" },
-    ],
-  },
-  {
-    id: "th2",
-    farmer: "Kiprop Langat",
-    phone: "254720998877",
-    channel: "offline-sms",
-    topic: "Cattle tick control",
-    unread: 0,
-    messages: [
-      { id: "m3", from: "farmer", text: "Is the Amitraz dip still in stock?", time: "Yesterday" },
-      {
-        id: "m4",
-        from: "store",
-        text: "Yes, we have 12 litres left. Pass by the counter today.",
-        time: "Yesterday",
-      },
-    ],
-  },
-];
-
-const farmerPool = [
-  { name: "Njeri Kamau", phone: "254714009911", topic: "Tomato late blight" },
-  { name: "Otieno Were", phone: "254705772211", topic: "Layer chicken drop in eggs" },
-  { name: "Chebet Rono", phone: "254718330077", topic: "Potato seed availability" },
-  { name: "Mutiso Ndeti", phone: "254799441122", topic: "Goat deworming schedule" },
-  { name: "Amina Hassan", phone: "254736554400", topic: "Kale aphid infestation" },
-];
-
-const inquiryLines = [
-  "Which product do you recommend and what does it cost?",
-  "Do you have stock today? I can come to the counter this evening.",
-  "How much should I dilute per 20 litre knapsack?",
-  "Can you deliver to my farm this week?",
-];
 
 export function daysUntil(dateStr: string | null): number | null {
   if (!dateStr || !String(dateStr).trim()) return null;
@@ -305,18 +268,23 @@ type Ctx = {
   newOrderCount: number;
   clearNewOrders: () => void;
   threads: Thread[];
+  threadsReady: boolean;
+  threadsLoading: boolean;
+  refreshThreads: () => Promise<Thread[]>;
+  resetThreads: () => void;
   unreadMessages: number;
   openThreadId: string | null;
-  openChat: (id: string | null) => void;
+  openChat: (id: string | null) => Promise<void>;
   markRead: (id: string) => void;
-  sendMessage: (threadId: string, text: string) => void;
-  startThread: (
-    farmer: string,
-    phone: string,
-    channel: Channel,
-    topic: string,
-    text: string,
-  ) => void;
+  sendMessage: (threadId: string, text: string) => Promise<void>;
+  startThread: (input: {
+    customerId?: string;
+    name: string;
+    phone: string;
+    channel: Channel;
+    topic: string;
+    text: string;
+  }) => Promise<Thread>;
   lastIncoming: { thread: Thread; text: string; key: string } | null;
   soundOn: boolean;
   setSoundOn: (v: boolean) => void;
@@ -340,11 +308,15 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [weeklySales, setWeeklySales] = useState<WeeklySalesRow[]>([]);
   const [weeklySalesReady, setWeeklySalesReady] = useState(false);
   const [weeklySalesLoading, setWeeklySalesLoading] = useState(false);
-  const [threads, setThreads] = useState<Thread[]>(seedThreads);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [threadsReady, setThreadsReady] = useState(false);
+  const [threadsLoading, setThreadsLoading] = useState(false);
   const [newOrderCount, setNewOrderCount] = useState(0);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   const chargingOrderIds = useRef(new Set<string>());
+  const threadsRef = useRef<Thread[]>([]);
+  threadsRef.current = threads;
 
   const mapProduct = useCallback((raw: ReturnType<typeof apiProductToProduct>): Product => {
     const category = CATEGORIES.includes(raw.category as Category)
@@ -381,6 +353,37 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       paidAt: raw.paidAt ?? null,
     };
   }, []);
+
+  const mapThread = useCallback((raw: ReturnType<typeof apiThreadToThread>): Thread => {
+    const channel: Channel = raw.channel === "offline-sms" ? "offline-sms" : "in-app";
+    return { ...raw, channel };
+  }, []);
+
+  const sortThreads = useCallback((list: Thread[]) => {
+    return [...list].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+  }, []);
+
+  const mergeThreadList = useCallback(
+    (fetched: Thread[], previous: Thread[]) => {
+      const prevById = new Map(previous.map((t) => [t.id, t]));
+      return sortThreads(
+        fetched.map((next) => {
+          const old = prevById.get(next.id);
+          if (old?.messagesLoaded) {
+            return {
+              ...next,
+              messages: old.messages,
+              messagesLoaded: true,
+            };
+          }
+          return next;
+        }),
+      );
+    },
+    [sortThreads],
+  );
 
   const hydrateProfile = useCallback((p: Partial<StoreProfile> | StoreProfile) => {
     setProfileState((prev) => ({ ...prev, ...p }));
@@ -714,62 +717,187 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const resetThreads = useCallback(() => {
+    setThreads([]);
+    setThreadsReady(false);
+    setThreadsLoading(false);
+    setOpenThreadId(null);
+  }, []);
+
+  const refreshThreads = useCallback(async () => {
+    setThreadsLoading(true);
+    try {
+      const list = (await fetchThreads()).map((row) => mapThread(apiThreadToThread(row)));
+      setThreads((prev) => mergeThreadList(list, prev));
+      setThreadsReady(true);
+      return mergeThreadList(list, threadsRef.current);
+    } finally {
+      setThreadsLoading(false);
+    }
+  }, [mapThread, mergeThreadList]);
+
   const markRead = useCallback(
     (id: string) => setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t))),
     [],
   );
 
   const openChat = useCallback(
-    (id: string | null) => {
+    async (id: string | null) => {
       setOpenThreadId(id);
-      if (id) markRead(id);
+      if (!id) return;
+
+      const current = threadsRef.current.find((t) => t.id === id);
+      const previousUnread = current?.unread ?? 0;
+      setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t)));
+
+      if (!current?.messagesLoaded) {
+        try {
+          const detail = mapThread(apiThreadToThread(await fetchThreadDetail(id)));
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === id
+                ? {
+                    ...detail,
+                    unread: 0,
+                  }
+                : t,
+            ),
+          );
+        } catch (err) {
+          console.warn("Failed to load thread messages", err);
+        }
+      }
+
+      try {
+        const res = await markThreadRead(id);
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === id ? { ...t, unread: res.unread, updatedAt: res.updated_at } : t,
+          ),
+        );
+      } catch {
+        setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: previousUnread } : t)));
+      }
     },
-    [markRead],
+    [mapThread],
   );
 
-  const sendMessage = useCallback((threadId: string, text: string) => {
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              unread: 0,
-              messages: [...t.messages, { id: uid(), from: "store", text, time: nowTime() }],
-            }
-          : t,
-      ),
-    );
-  }, []);
+  const sendMessage = useCallback(
+    async (threadId: string, text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
 
-  const startThread = useCallback(
-    (farmer: string, phone: string, channel: Channel, topic: string, text: string) => {
-      setThreads((prev) => {
-        const existing = prev.find((t) => t.phone === phone);
-        if (existing) {
-          return prev.map((t) =>
-            t.id === existing.id
+      const tempId = `tmp-${uid()}`;
+      const nowIso = new Date().toISOString();
+      const optimistic: ChatMessage = {
+        id: tempId,
+        from: "store",
+        text: trimmed,
+        time: nowTime(),
+        createdAt: nowIso,
+      };
+
+      setThreads((prev) =>
+        sortThreads(
+          prev.map((t) =>
+            t.id === threadId
               ? {
                   ...t,
-                  messages: [...t.messages, { id: uid(), from: "store", text, time: nowTime() }],
+                  messages: [...t.messages, optimistic],
+                  lastMessage: optimistic,
+                  updatedAt: nowIso,
+                  messagesLoaded: true,
                 }
               : t,
-          );
+          ),
+        ),
+      );
+
+      try {
+        const res = await postThreadMessage(threadId, trimmed);
+        const msg = apiMessageToMessage(res.message);
+        setThreads((prev) =>
+          sortThreads(
+            prev.map((t) =>
+              t.id === threadId
+                ? {
+                    ...t,
+                    unread: res.thread.unread,
+                    updatedAt: res.thread.updated_at,
+                    messages: t.messages.map((m) => (m.id === tempId ? msg : m)),
+                    lastMessage: msg,
+                    messagesLoaded: true,
+                  }
+                : t,
+            ),
+          ),
+        );
+      } catch (err) {
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.filter((m) => m.id !== tempId),
+                  lastMessage: t.messages.filter((m) => m.id !== tempId).at(-1) ?? t.lastMessage,
+                }
+              : t,
+          ),
+        );
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshThreads();
+          throw new ApiError("This conversation no longer exists.", 404, err.body);
         }
-        return [
-          {
-            id: uid(),
-            farmer,
-            phone,
-            channel,
-            topic,
-            unread: 0,
-            messages: [{ id: uid(), from: "store", text, time: nowTime() }],
-          },
-          ...prev,
-        ];
-      });
+        throw err;
+      }
     },
-    [],
+    [refreshThreads, sortThreads],
+  );
+
+  const startThread = useCallback(
+    async (input: {
+      customerId?: string;
+      name: string;
+      phone: string;
+      channel: Channel;
+      topic: string;
+      text: string;
+    }) => {
+      let customerId = (input.customerId || "").trim();
+      if (!customerId) {
+        const saved = await upsertCustomerEntry({
+          name: input.name,
+          phone: input.phone,
+        });
+        customerId = saved.id;
+      }
+
+      const digits = (p: string) => p.replace(/\D/g, "").replace(/^0/, "254");
+      const existing =
+        threadsRef.current.find((t) => t.customerId && t.customerId === customerId) ||
+        threadsRef.current.find((t) => digits(t.phone) === digits(input.phone));
+
+      if (existing) {
+        await sendMessage(existing.id, input.text);
+        const updated = threadsRef.current.find((t) => t.id === existing.id) ?? existing;
+        return updated;
+      }
+
+      const created = mapThread(
+        apiThreadToThread(
+          await createThreadApi({
+            customer_id: Number(customerId),
+            topic: input.topic,
+            channel: input.channel,
+            ...(input.text.trim() ? { message: input.text.trim() } : {}),
+          }),
+        ),
+      );
+      setThreads((prev) => sortThreads([created, ...prev.filter((t) => t.id !== created.id)]));
+      setThreadsReady(true);
+      return created;
+    },
+    [mapThread, sendMessage, sortThreads, upsertCustomerEntry],
   );
 
   const enablePush = useCallback(() => {
@@ -782,45 +910,46 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Simulated realtime channel (stands in for Supabase Realtime / WebSocket feed)
   const [incoming, setIncoming] = useState<{ thread: Thread; text: string; key: string } | null>(
     null,
   );
 
+  // Poll for farmer-side updates (no farmer API yet — normally idle until admin seeds unread).
   useEffect(() => {
-    if (!profile.open) return;
-    const timer = window.setInterval(() => {
-      const f = farmerPool[Math.floor(Math.random() * farmerPool.length)]!;
-      const text = inquiryLines[Math.floor(Math.random() * inquiryLines.length)]!;
-      const msg: ChatMessage = { id: uid(), from: "farmer", text, time: nowTime() };
-      let delivered: Thread | null = null;
-      setThreads((prev) => {
-        const existing = prev.find((t) => t.phone === f.phone);
-        if (existing) {
-          delivered = {
-            ...existing,
-            unread: existing.unread + 1,
-            messages: [...existing.messages, msg],
-          };
-          return prev.map((t) => (t.id === existing.id ? delivered! : t));
+    if (!threadsReady) return;
+
+    const poll = async () => {
+      if (!getAccessToken()) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      try {
+        const list = (await fetchThreads()).map((row) => mapThread(apiThreadToThread(row)));
+        const prev = threadsRef.current;
+        const prevById = new Map(prev.map((t) => [t.id, t]));
+
+        for (const next of list) {
+          const old = prevById.get(next.id);
+          const last = next.lastMessage;
+          const isNewFarmer =
+            last?.from === "farmer" &&
+            (!old || old.lastMessage?.id !== last.id || next.unread > (old.unread ?? 0));
+          if (isNewFarmer && last) {
+            setIncoming({ thread: next, text: last.text, key: uid() });
+            break;
+          }
         }
-        delivered = {
-          id: uid(),
-          farmer: f.name,
-          phone: f.phone,
-          channel: "in-app",
-          topic: f.topic,
-          unread: 1,
-          messages: [msg],
-        };
-        return [delivered, ...prev];
-      });
-      window.setTimeout(() => {
-        if (delivered) setIncoming({ thread: delivered, text, key: uid() });
-      }, 0);
-    }, 25000);
+
+        setThreads((current) => mergeThreadList(list, current));
+      } catch (err) {
+        console.warn("Thread poll failed", err);
+      }
+    };
+
+    const timer = window.setInterval(() => {
+      void poll();
+    }, 50000);
+
     return () => window.clearInterval(timer);
-  }, [profile.open]);
+  }, [threadsReady, mapThread, mergeThreadList]);
 
   useEffect(() => {
     if (!incoming) return;
@@ -877,6 +1006,10 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       newOrderCount,
       clearNewOrders: () => setNewOrderCount(0),
       threads,
+      threadsReady,
+      threadsLoading,
+      refreshThreads,
+      resetThreads,
       unreadMessages,
       openThreadId,
       openChat,
@@ -930,6 +1063,10 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       upsertCustomerEntry,
       newOrderCount,
       threads,
+      threadsReady,
+      threadsLoading,
+      refreshThreads,
+      resetThreads,
       unreadMessages,
       openThreadId,
       openChat,

@@ -73,6 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetCustomers,
     refreshWeeklySales,
     resetWeeklySales,
+    refreshThreads,
+    resetThreads,
   } = usePortal();
   const navigate = useNavigate();
   const [vendor, setVendor] = useState<VendorMe | null>(null);
@@ -119,6 +121,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshWeeklySales]);
 
+  const loadThreads = useCallback(async () => {
+    try {
+      await refreshThreads();
+    } catch (err) {
+      console.warn("Failed to load threads", err);
+    }
+  }, [refreshThreads]);
+
   const logout = useCallback(() => {
     clearTokens();
     setVendor(null);
@@ -127,8 +137,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetOrders();
     resetCustomers();
     resetWeeklySales();
+    resetThreads();
     void navigate({ to: "/login" });
-  }, [navigate, resetProfile, resetProducts, resetOrders, resetCustomers, resetWeeklySales]);
+  }, [
+    navigate,
+    resetProfile,
+    resetProducts,
+    resetOrders,
+    resetCustomers,
+    resetWeeklySales,
+    resetThreads,
+  ]);
 
   const refreshMe = useCallback(async () => {
     if (!getAccessToken()) {
@@ -159,8 +178,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadOrders();
     await loadCustomers();
     await loadWeeklySales();
+    await loadThreads();
     return me;
-  }, [loadStoreProfile, hydrateProfile, loadProducts, loadOrders, loadCustomers, loadWeeklySales]);
+  }, [
+    loadStoreProfile,
+    hydrateProfile,
+    loadProducts,
+    loadOrders,
+    loadCustomers,
+    loadWeeklySales,
+    loadThreads,
+  ]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -194,9 +222,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadOrders();
       await loadCustomers();
       await loadWeeklySales();
+      await loadThreads();
       return me;
     },
-    [loadStoreProfile, hydrateProfile, loadProducts, loadOrders, loadCustomers, loadWeeklySales],
+    [
+      loadStoreProfile,
+      hydrateProfile,
+      loadProducts,
+      loadOrders,
+      loadCustomers,
+      loadWeeklySales,
+      loadThreads,
+    ],
   );
 
   const register = useCallback(
@@ -246,10 +283,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetOrders();
       resetCustomers();
       resetWeeklySales();
+      resetThreads();
       void navigate({ to: "/login" });
     });
     return () => setUnauthorizedHandler(null);
-  }, [navigate, resetProfile, resetProducts, resetOrders, resetCustomers, resetWeeklySales]);
+  }, [
+    navigate,
+    resetProfile,
+    resetProducts,
+    resetOrders,
+    resetCustomers,
+    resetWeeklySales,
+    resetThreads,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,6 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           resetOrders();
           resetCustomers();
           resetWeeklySales();
+          resetThreads();
           if (!(err instanceof ApiError && err.status === 401)) {
             console.warn("Failed to restore session", err);
           }
@@ -280,7 +327,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshMe, resetProfile, resetProducts, resetOrders, resetCustomers, resetWeeklySales]);
+  }, [
+    refreshMe,
+    resetProfile,
+    resetProducts,
+    resetOrders,
+    resetCustomers,
+    resetWeeklySales,
+    resetThreads,
+  ]);
 
   const value = useMemo<AuthCtx>(
     () => ({
