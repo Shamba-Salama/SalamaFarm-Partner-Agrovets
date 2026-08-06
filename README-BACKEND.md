@@ -48,7 +48,8 @@ Environment variables are loaded from `.env` via **django-environ** (see `.env.e
 `config.settings.dev` allows:
 
 - `http://localhost:5173` / `http://127.0.0.1:5173` (Vite default)
-- `http://localhost:3000` / `http://127.0.0.1:3000` (common TanStack Start / Lovable)
+- `http://localhost:3000` / `http://127.0.0.1:3000` (common alternate local ports)
+- `http://localhost:8080` / `http://127.0.0.1:8080` (Vite when another port is preferred)
 
 ## Apps
 
