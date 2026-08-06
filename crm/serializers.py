@@ -62,6 +62,31 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "phone", "created_at", "updated_at")
         read_only_fields = ("id", "created_at", "updated_at")
 
+    def validate_phone(self, value: str) -> str:
+        phone = (value or "").strip()
+        if not phone:
+            raise serializers.ValidationError("Phone number is required.")
+
+        # POST create uses update_or_create (upsert-by-phone). Enforce uniqueness
+        # only on update so a PATCH cannot steal another customer's phone.
+        if self.instance is None:
+            return phone
+
+        store = self.context.get("store") or getattr(self.instance, "store", None)
+        if store is None:
+            return phone
+
+        clash = (
+            Customer.objects.filter(store=store, phone=phone)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        )
+        if clash:
+            raise serializers.ValidationError(
+                "A customer with this phone already exists"
+            )
+        return phone
+
 
 class CustomerDetailSerializer(CustomerSerializer):
     recent_orders = serializers.SerializerMethodField()
