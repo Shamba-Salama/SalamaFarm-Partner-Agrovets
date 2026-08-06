@@ -1,14 +1,12 @@
 """Store API — singleton for the authenticated vendor's AgrovetStore."""
 
-from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from payments.paystack_client import PaystackClient, PaystackError
-
 from .models import AgrovetStore
+from .paystack_subaccount import ensure_paystack_subaccount
 from .serializers import AgrovetStoreSerializer, CreateSubaccountSerializer
 
 
@@ -57,77 +55,42 @@ class CreateSubaccountView(APIView):
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
 
-        business_name = (store.name or "").strip()
-        if not business_name:
-            return Response(
-                {"detail": "Store name is required before creating a Paystack subaccount."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Defaults: Kenya M-Pesa bank code + store till as account_number.
-        # See README / endpoint docstring notes: Till vs phone is ambiguous in docs.
-        settlement_bank = data.get("settlement_bank") or getattr(
-            settings, "PAYSTACK_DEFAULT_SETTLEMENT_BANK", "MPTILL"
-        )
-        account_number = (data.get("account_number") or store.till or "").strip()
-        if not account_number:
-            return Response(
-                {
-                    "detail": (
-                        "Store till (or account_number in the request body) is required "
-                        "for Paystack subaccount settlement."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        percentage_charge = data.get(
-            "percentage_charge",
-            float(getattr(settings, "PAYSTACK_DEFAULT_PERCENTAGE_CHARGE", 0.0)),
+        result = ensure_paystack_subaccount(
+            store,
+            settlement_bank=data.get("settlement_bank"),
+            account_number=data.get("account_number"),
+            percentage_charge=data.get("percentage_charge"),
         )
 
-        try:
-            client = PaystackClient()
-            extra = {}
-            if store.attendant_phone:
-                extra["primary_contact_phone"] = store.attendant_phone
-            payload = client.create_subaccount(
-                business_name=business_name,
-                settlement_bank=settlement_bank,
-                account_number=account_number,
-                percentage_charge=percentage_charge,
-                **extra,
-            )
-        except PaystackError as exc:
+        if not result.ok:
+            # Validation-style failures (missing name/till) → 400; Paystack → 502.
+            is_client = result.paystack_status is None and result.paystack_payload is None
             return Response(
                 {
-                    "detail": str(exc),
-                    "paystack_status": exc.status_code,
-                    "paystack_payload": exc.payload,
+                    "detail": result.error or "Could not create Paystack subaccount.",
+                    **(
+                        {}
+                        if is_client
+                        else {
+                            "paystack_status": result.paystack_status,
+                            "paystack_payload": result.paystack_payload,
+                        }
+                    ),
                 },
-                status=status.HTTP_502_BAD_GATEWAY,
+                status=(
+                    status.HTTP_400_BAD_REQUEST
+                    if is_client
+                    else status.HTTP_502_BAD_GATEWAY
+                ),
             )
 
-        sub_data = payload.get("data") or {}
-        code = sub_data.get("subaccount_code") or ""
-        if not code:
-            return Response(
-                {
-                    "detail": "Paystack response missing subaccount_code.",
-                    "paystack_payload": payload,
-                },
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
-
-        store.paystack_subaccount_code = code
-        store.save(update_fields=["paystack_subaccount_code", "updated_at"])
-
+        store.refresh_from_db()
         return Response(
             {
-                "created": True,
-                "subaccount_code": code,
+                "created": result.created,
+                "subaccount_code": result.subaccount_code,
                 "store": AgrovetStoreSerializer(store).data,
-                "paystack": sub_data,
+                "paystack": result.paystack,
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_201_CREATED if result.created else status.HTTP_200_OK,
         )

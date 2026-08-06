@@ -115,14 +115,21 @@ Kinds: `charge` / `transfer`. Finalization is via `POST /api/paystack/webhook/` 
 | POST | `/api/v1/payments/charge/` | JWT — body `{order_id, phone}`; M-Pesa STK via Charge API |
 | POST | `/api/paystack/webhook/` | Public — HMAC-SHA512 via `X-Paystack-Signature`; `charge.success` / `charge.failed` |
 
-On `charge.success`: mark `MpesaTransaction` success, set `CustomerOrder.paid_at`, and if
-`pickup` was `Unmatched` move it to `Awaiting Pickup`. On `charge.failed`: mark failed and
+On `charge.success`: mark `MpesaTransaction` success, set `CustomerOrder.paid_at`, copy
+receipt/reference onto `CustomerOrder.mpesa_code`, and if `pickup` was `Unmatched` move it
+to `Awaiting Pickup`. On `charge.failed`: mark failed and
 store gateway message. Unknown references are logged and still return 200 (avoid retry storms).
 
-`POST /payments/charge/` looks up a store-scoped order, requires `paystack_subaccount_code`,
+`POST /payments/charge/` looks up a store-scoped order, rejects with 400 if the order
+already has a `pending` or `success` charge transaction (no second Paystack call), requires
+`paystack_subaccount_code`,
 converts `order.amount` to cents (`KES * 100`), normalizes phone to `+254…`, calls
 `PaystackClient.charge_mobile_money` (`provider=mpesa`, `bearer=subaccount`), and creates a
 `pending` `MpesaTransaction`. Response includes `reference`, `display_text`, and Paystack `data`.
+
+`POST /auth/register/` best-effort creates a Paystack subaccount for the new store (same
+defaults as create-subaccount). Paystack failures are logged and do not fail registration;
+`paystack_subaccount_code` may remain blank until `POST /store/create-subaccount/`.
 
 Defaults for create-subaccount: `settlement_bank=MPTILL`, `account_number=store.till`,
 `percentage_charge` from `PAYSTACK_DEFAULT_PERCENTAGE_CHARGE` (default **5.0** — placeholder

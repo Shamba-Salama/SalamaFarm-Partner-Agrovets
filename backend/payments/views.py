@@ -53,6 +53,23 @@ class ChargeView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Idempotency: do not fire a second Paystack charge while one is pending
+        # or after a successful charge for this order.
+        charge_txns = MpesaTransaction.objects.filter(
+            order=order,
+            kind=MpesaTransaction.Kind.CHARGE,
+        )
+        if charge_txns.filter(status=MpesaTransaction.Status.SUCCESS).exists():
+            return Response(
+                {"detail": "Order already paid"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if charge_txns.filter(status=MpesaTransaction.Status.PENDING).exists():
+            return Response(
+                {"detail": "A charge is already in progress for this order"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         subaccount_code = (store.paystack_subaccount_code or "").strip()
         if not subaccount_code:
             return Response(
@@ -224,6 +241,12 @@ class PaystackWebhookView(APIView):
             if order is not None:
                 order.paid_at = paid_at
                 update_fields = ["paid_at", "updated_at"]
+                # Populate verify-code field used by the frontend reconciliation UI.
+                # Prefer Paystack receipt_number; fall back to the charge reference.
+                code = (receipt or reference or "").strip()
+                if code:
+                    order.mpesa_code = code[:20]
+                    update_fields.append("mpesa_code")
                 if order.pickup == CustomerOrder.Pickup.UNMATCHED:
                     order.pickup = CustomerOrder.Pickup.AWAITING_PICKUP
                     update_fields.append("pickup")
