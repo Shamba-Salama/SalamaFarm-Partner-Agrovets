@@ -4,9 +4,61 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+
+import {
+  apiStoreToProfile,
+  emptyStoreProfile,
+  fetchStore,
+  patchStore,
+  type StoreProfile,
+} from "@/lib/store-api";
+import {
+  apiProductToProduct,
+  createProduct as createProductApi,
+  deleteProductApi,
+  fetchProducts,
+  importProductsCsv,
+  toggleProductActive,
+  updateProduct as updateProductApi,
+  type ProductWriteBody,
+} from "@/lib/catalog-api";
+import {
+  apiCustomerToCustomer,
+  apiOrderToOrder,
+  buildCounterOrderBody,
+  createOrder as createOrderApi,
+  fetchCustomers,
+  fetchOrders,
+  patchOrder,
+  upsertCustomer,
+  type PortalCustomer,
+} from "@/lib/crm-api";
+import { fetchWeeklySales, type WeeklySalesRow } from "@/lib/analytics-api";
+import { chargeOrder, createSubaccount, type ChargeResponse } from "@/lib/payments-api";
+import {
+  apiMessageToMessage,
+  apiThreadToThread,
+  createThread as createThreadApi,
+  fetchThreadDetail,
+  fetchThreads,
+  markThreadRead,
+  postThreadMessage,
+} from "@/lib/messaging-api";
+import { ApiError } from "@/lib/api-client";
+import { getAccessToken } from "@/lib/auth-storage";
+
+export type { WeeklySalesRow } from "@/lib/analytics-api";
+export type { ChargeResponse } from "@/lib/payments-api";
+export { prepareWeeklySalesChartRows } from "@/lib/analytics-api";
+
+export type { ApiStore, StoreProfile } from "@/lib/store-api";
+export { emptyStoreProfile } from "@/lib/store-api";
+export type { PortalCustomer } from "@/lib/crm-api";
+export type { ProductWriteBody } from "@/lib/catalog-api";
 
 export type Category = "Fertilizer" | "Seeds" | "Vet Supplies" | "Pesticides";
 
@@ -21,8 +73,9 @@ export type Product = {
   description: string;
   price: number;
   stock: number;
-  expiry: string; // ISO date
+  expiry: string | null;
   image: string;
+  imageUrl?: string | null;
   active: boolean;
 };
 
@@ -33,6 +86,7 @@ export type OrderItem = { name: string; qty: number; price: number };
 export type CustomerOrder = {
   id: string;
   customer: string;
+  customerId?: string;
   phone: string;
   product: string;
   items: OrderItem[];
@@ -44,6 +98,7 @@ export type CustomerOrder = {
   channel: Channel;
   orderType: "Counter Pickup" | "Delivery";
   pickup: "Collected" | "Awaiting Pickup" | "Unmatched";
+  paidAt: string | null;
 };
 
 export type ChatMessage = {
@@ -51,26 +106,21 @@ export type ChatMessage = {
   from: "farmer" | "store";
   text: string;
   time: string;
+  createdAt: string;
 };
 
 export type Thread = {
   id: string;
   farmer: string;
+  customerId: string;
   phone: string;
   channel: Channel;
   topic: string;
   unread: number;
+  lastMessage: ChatMessage | null;
   messages: ChatMessage[];
-};
-
-export type StoreProfile = {
-  name: string;
-  town: string;
-  county: string;
-  till: string;
-  attendantPhone: string;
-  open: boolean;
-  onboarded: boolean;
+  messagesLoaded: boolean;
+  updatedAt: string;
 };
 
 export const FOLLOW_UP_TEMPLATES = [
@@ -100,209 +150,20 @@ export const FOLLOW_UP_TEMPLATES = [
   },
 ] as const;
 
-const seedProducts: Product[] = [
-  {
-    id: "p1",
-    name: "YaraMila Cereal 50kg",
-    category: "Fertilizer",
-    description: "NPK 23:10:5 top dressing fertilizer. Apply 1 handful per planting hole.",
-    price: 4850,
-    stock: 24,
-    expiry: "2027-04-30",
-    image: "🌾",
-    active: true,
-  },
-  {
-    id: "p2",
-    name: "Simba Hybrid Maize SC Duma 43",
-    category: "Seeds",
-    description: "Early maturing drought tolerant maize seed, 2kg pack.",
-    price: 780,
-    stock: 3,
-    expiry: "2026-11-12",
-    image: "🌽",
-    active: true,
-  },
-  {
-    id: "p3",
-    name: "Amitraz Cattle Dip 1L",
-    category: "Vet Supplies",
-    description: "Acaricide for tick control in cattle. Dilute 2ml per litre of water.",
-    price: 1650,
-    stock: 12,
-    expiry: "2026-08-20",
-    image: "🐄",
-    active: true,
-  },
-  {
-    id: "p4",
-    name: "Ridomil Gold MZ 250g",
-    category: "Pesticides",
-    description: "Systemic fungicide for late blight in potatoes and tomatoes.",
-    price: 1200,
-    stock: 8,
-    expiry: "2026-07-25",
-    image: "🧴",
-    active: true,
-  },
-  {
-    id: "p5",
-    name: "Kienyeji Chick Mash 20kg",
-    category: "Vet Supplies",
-    description: "Balanced starter mash for indigenous chicks, 0-8 weeks.",
-    price: 1980,
-    stock: 2,
-    expiry: "2026-09-05",
-    image: "🐓",
-    active: false,
-  },
-  {
-    id: "p6",
-    name: "Sukari F1 Tomato Seeds 10g",
-    category: "Seeds",
-    description: "High yielding determinate tomato variety for open field.",
-    price: 2400,
-    stock: 17,
-    expiry: "2027-01-18",
-    image: "🍅",
-    active: true,
-  },
-];
-
-const seedOrders: CustomerOrder[] = [
-  {
-    id: "o1",
-    customer: "Wanjiku Mwangi",
-    phone: "254712345678",
-    product: "YaraMila Cereal 50kg",
-    items: [{ name: "YaraMila Cereal 50kg", qty: 1, price: 4850 }],
-    date: "2026-07-24",
-    time: "15:02",
-    mpesaCode: "SGH4KL92AC",
-    amount: 4850,
-    status: "Pending",
-    channel: "in-app",
-    orderType: "Counter Pickup",
-    pickup: "Collected",
-  },
-  {
-    id: "o2",
-    customer: "Kiprop Langat",
-    phone: "254720998877",
-    product: "Amitraz Cattle Dip 1L",
-    items: [{ name: "Amitraz Cattle Dip 1L", qty: 1, price: 1650 }],
-    date: "2026-07-22",
-    time: "11:41",
-    mpesaCode: "SGF8ZZ21QW",
-    amount: 1650,
-    status: "Contacted",
-    channel: "offline-sms",
-    orderType: "Counter Pickup",
-    pickup: "Collected",
-  },
-  {
-    id: "o3",
-    customer: "Achieng Otieno",
-    phone: "254733445566",
-    product: "Sukari F1 Tomato Seeds 10g",
-    items: [{ name: "Sukari F1 Tomato Seeds 10g", qty: 1, price: 2400 }],
-    date: "2026-07-19",
-    time: "08:30",
-    mpesaCode: "SGD1RT77MN",
-    amount: 2400,
-    status: "Satisfied",
-    channel: "in-app",
-    orderType: "Delivery",
-    pickup: "Collected",
-  },
-  {
-    id: "o4",
-    customer: "Musyoka Kimeu",
-    phone: "254701223344",
-    product: "Ridomil Gold MZ 250g",
-    items: [{ name: "Ridomil Gold MZ 250g", qty: 1, price: 1200 }],
-    date: "2026-07-28",
-    time: "09:14",
-    mpesaCode: "SGJ9PL44BV",
-    amount: 1200,
-    status: "Pending",
-    channel: "offline-sms",
-    orderType: "Counter Pickup",
-    pickup: "Awaiting Pickup",
-  },
-];
-
-const seedThreads: Thread[] = [
-  {
-    id: "th1",
-    farmer: "Wanjiku Mwangi",
-    phone: "254712345678",
-    channel: "in-app",
-    topic: "Maize leaf yellowing",
-    unread: 2,
-    messages: [
-      {
-        id: "m1",
-        from: "farmer",
-        text: "Habari, my maize leaves are turning yellow from the bottom. Which fertilizer should I add?",
-        time: "08:12",
-      },
-      { id: "m2", from: "farmer", text: "The crop is 6 weeks old.", time: "08:13" },
-    ],
-  },
-  {
-    id: "th2",
-    farmer: "Kiprop Langat",
-    phone: "254720998877",
-    channel: "offline-sms",
-    topic: "Cattle tick control",
-    unread: 0,
-    messages: [
-      { id: "m3", from: "farmer", text: "Is the Amitraz dip still in stock?", time: "Yesterday" },
-      {
-        id: "m4",
-        from: "store",
-        text: "Yes, we have 12 litres left. Pass by the counter today.",
-        time: "Yesterday",
-      },
-    ],
-  },
-];
-
-const farmerPool = [
-  { name: "Njeri Kamau", phone: "254714009911", topic: "Tomato late blight" },
-  { name: "Otieno Were", phone: "254705772211", topic: "Layer chicken drop in eggs" },
-  { name: "Chebet Rono", phone: "254718330077", topic: "Potato seed availability" },
-  { name: "Mutiso Ndeti", phone: "254799441122", topic: "Goat deworming schedule" },
-  { name: "Amina Hassan", phone: "254736554400", topic: "Kale aphid infestation" },
-];
-
-const inquiryLines = [
-  "Which product do you recommend and what does it cost?",
-  "Do you have stock today? I can come to the counter this evening.",
-  "How much should I dilute per 20 litre knapsack?",
-  "Can you deliver to my farm this week?",
-];
-
-export const weeklySales = [
-  { week: "Wk 22", Fertilizer: 42000, Seeds: 18000, "Vet Supplies": 21000, Pesticides: 12000 },
-  { week: "Wk 23", Fertilizer: 51000, Seeds: 22500, "Vet Supplies": 17800, Pesticides: 15400 },
-  { week: "Wk 24", Fertilizer: 38500, Seeds: 30100, "Vet Supplies": 24200, Pesticides: 11200 },
-  { week: "Wk 25", Fertilizer: 61200, Seeds: 27400, "Vet Supplies": 19600, Pesticides: 18900 },
-  { week: "Wk 26", Fertilizer: 47800, Seeds: 33800, "Vet Supplies": 28100, Pesticides: 14300 },
-  { week: "Wk 27", Fertilizer: 72400, Seeds: 29900, "Vet Supplies": 31500, Pesticides: 20600 },
-];
-
-export function daysUntil(dateStr: string) {
-  const today = new Date("2026-07-30T00:00:00Z").getTime();
-  return Math.round((new Date(dateStr + "T00:00:00Z").getTime() - today) / 86400000);
+export function daysUntil(dateStr: string | null): number | null {
+  if (!dateStr || !String(dateStr).trim()) return null;
+  const parsed = new Date(`${dateStr}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const now = new Date();
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((parsed.getTime() - todayMs) / 86400000);
 }
 
 export function stockStatus(p: Product): "In Stock" | "Low Stock" | "Expired" | "Clearance" {
   const d = daysUntil(p.expiry);
-  if (d < 0) return "Expired";
+  if (d !== null && d < 0) return "Expired";
   if (p.stock < 5) return "Low Stock";
-  if (d <= 30) return "Clearance";
+  if (d !== null && d <= 30) return "Clearance";
   return "In Stock";
 }
 
@@ -353,30 +214,77 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 type Ctx = {
   profile: StoreProfile;
-  setProfile: (p: Partial<StoreProfile>) => void;
+  storeReady: boolean;
+  /** Apply a store profile from an API response without a network call. */
+  hydrateProfile: (p: Partial<StoreProfile> | StoreProfile) => void;
+  resetProfile: () => void;
+  /** GET /store/ and replace local profile. */
+  refreshStore: () => Promise<StoreProfile>;
+  /** PATCH /store/ and update local profile from the response. */
+  updateStore: (p: Partial<StoreProfile>) => Promise<StoreProfile>;
+  /** Optimistic PATCH { open: !current }. Reverts on failure. */
+  toggleStoreOpen: () => Promise<StoreProfile>;
   products: Product[];
-  saveProduct: (p: Product) => void;
-  importProducts: (p: Product[]) => void;
-  deleteProduct: (id: string) => void;
-  toggleProduct: (id: string) => void;
+  productsReady: boolean;
+  productsLoading: boolean;
+  refreshProducts: () => Promise<Product[]>;
+  createProductEntry: (draft: ProductWriteBody) => Promise<Product>;
+  updateProductEntry: (id: string, draft: ProductWriteBody) => Promise<Product>;
+  removeProduct: (id: string) => Promise<void>;
+  toggleProduct: (id: string) => Promise<Product>;
+  importProductsCsvFile: (file: File) => Promise<{ created: number }>;
+  resetProducts: () => void;
   orders: CustomerOrder[];
-  setOrderStatus: (id: string, status: FollowUpStatus) => void;
-  setPickup: (id: string, pickup: CustomerOrder["pickup"]) => void;
+  ordersReady: boolean;
+  ordersLoading: boolean;
+  customers: PortalCustomer[];
+  customersReady: boolean;
+  customersLoading: boolean;
+  refreshOrders: () => Promise<CustomerOrder[]>;
+  resetOrders: () => void;
+  refreshCustomers: () => Promise<PortalCustomer[]>;
+  resetCustomers: () => void;
+  createOrderEntry: (body: unknown) => Promise<CustomerOrder>;
+  createCounterOrder: (input: {
+    phone: string;
+    productId: string;
+    customer?: string;
+  }) => Promise<{ order: CustomerOrder; channel: Channel }>;
+  /** Initiate Paystack STK for an unpaid order. Does not mark paid locally. */
+  chargeCounterOrder: (input: { orderId: string; phone: string }) => Promise<ChargeResponse>;
+  createStoreSubaccount: () => Promise<{
+    created: boolean;
+    subaccountCode: string;
+    profile: StoreProfile;
+  }>;
+  weeklySales: WeeklySalesRow[];
+  weeklySalesReady: boolean;
+  weeklySalesLoading: boolean;
+  refreshWeeklySales: () => Promise<WeeklySalesRow[]>;
+  resetWeeklySales: () => void;
+  setOrderStatus: (id: string, status: FollowUpStatus) => Promise<CustomerOrder>;
+  setPickup: (id: string, pickup: CustomerOrder["pickup"]) => Promise<CustomerOrder>;
+  upsertCustomerEntry: (input: { name: string; phone: string }) => Promise<PortalCustomer>;
   newOrderCount: number;
   clearNewOrders: () => void;
   threads: Thread[];
+  threadsReady: boolean;
+  threadsLoading: boolean;
+  refreshThreads: () => Promise<Thread[]>;
+  resetThreads: () => void;
   unreadMessages: number;
   openThreadId: string | null;
-  openChat: (id: string | null) => void;
+  openChat: (id: string | null) => Promise<void>;
   markRead: (id: string) => void;
-  sendMessage: (threadId: string, text: string) => void;
-  startThread: (farmer: string, phone: string, channel: Channel, topic: string, text: string) => void;
-  stkPush: (input: {
+  sendMessage: (threadId: string, text: string) => Promise<void>;
+  startThread: (input: {
+    customerId?: string;
+    name: string;
     phone: string;
-    amount: number;
-    product: string;
-    customer?: string;
-  }) => { channel: Channel; code: string };
+    channel: Channel;
+    topic: string;
+    text: string;
+  }) => Promise<Thread>;
   lastIncoming: { thread: Thread; text: string; key: string } | null;
   soundOn: boolean;
   setSoundOn: (v: boolean) => void;
@@ -386,60 +294,447 @@ type Ctx = {
 const PortalContext = createContext<Ctx | null>(null);
 
 export function PortalProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfileState] = useState<StoreProfile>({
-    name: "Green Valley Agrovet",
-    town: "Nakuru Town",
-    county: "Nakuru",
-    till: "5203817",
-    attendantPhone: "0711223344",
-    open: true,
-    onboarded: false,
-  });
-  const [products, setProducts] = useState<Product[]>(seedProducts);
-  const [orders, setOrders] = useState<CustomerOrder[]>(seedOrders);
-  const [threads, setThreads] = useState<Thread[]>(seedThreads);
-  const [newOrderCount, setNewOrderCount] = useState(1);
+  const [profile, setProfileState] = useState<StoreProfile>(() => emptyStoreProfile());
+  const [storeReady, setStoreReady] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsReady, setProductsReady] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [ordersReady, setOrdersReady] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [customers, setCustomers] = useState<PortalCustomer[]>([]);
+  const [customersReady, setCustomersReady] = useState(false);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [weeklySales, setWeeklySales] = useState<WeeklySalesRow[]>([]);
+  const [weeklySalesReady, setWeeklySalesReady] = useState(false);
+  const [weeklySalesLoading, setWeeklySalesLoading] = useState(false);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [threadsReady, setThreadsReady] = useState(false);
+  const [threadsLoading, setThreadsLoading] = useState(false);
+  const [newOrderCount, setNewOrderCount] = useState(0);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+  const chargingOrderIds = useRef(new Set<string>());
+  const threadsRef = useRef<Thread[]>([]);
+  threadsRef.current = threads;
 
-  const setProfile = useCallback(
-    (p: Partial<StoreProfile>) => setProfileState((prev) => ({ ...prev, ...p })),
-    [],
-  );
+  const mapProduct = useCallback((raw: ReturnType<typeof apiProductToProduct>): Product => {
+    const category = CATEGORIES.includes(raw.category as Category)
+      ? (raw.category as Category)
+      : "Fertilizer";
+    return { ...raw, category };
+  }, []);
 
-  const saveProduct = useCallback((p: Product) => {
-    setProducts((prev) =>
-      prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? p : x)) : [p, ...prev],
+  const mapOrder = useCallback((raw: ReturnType<typeof apiOrderToOrder>): CustomerOrder => {
+    const channel: Channel = raw.channel === "offline-sms" ? "offline-sms" : "in-app";
+    const status: FollowUpStatus =
+      raw.status === "Contacted" || raw.status === "Satisfied" ? raw.status : "Pending";
+    const orderType: CustomerOrder["orderType"] =
+      raw.orderType === "Delivery" ? "Delivery" : "Counter Pickup";
+    const pickup: CustomerOrder["pickup"] =
+      raw.pickup === "Collected" || raw.pickup === "Awaiting Pickup" || raw.pickup === "Unmatched"
+        ? raw.pickup
+        : "Unmatched";
+    return {
+      id: raw.id,
+      customer: raw.customer,
+      customerId: raw.customerId,
+      phone: raw.phone,
+      product: raw.product,
+      items: raw.items,
+      date: raw.date,
+      time: raw.time,
+      mpesaCode: raw.mpesaCode,
+      amount: raw.amount,
+      status,
+      channel,
+      orderType,
+      pickup,
+      paidAt: raw.paidAt ?? null,
+    };
+  }, []);
+
+  const mapThread = useCallback((raw: ReturnType<typeof apiThreadToThread>): Thread => {
+    const channel: Channel = raw.channel === "offline-sms" ? "offline-sms" : "in-app";
+    return { ...raw, channel };
+  }, []);
+
+  const sortThreads = useCallback((list: Thread[]) => {
+    return [...list].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     );
   }, []);
 
-  const importProducts = useCallback(
-    (list: Product[]) => setProducts((prev) => [...list, ...prev]),
-    [],
+  const mergeThreadList = useCallback(
+    (fetched: Thread[], previous: Thread[]) => {
+      const prevById = new Map(previous.map((t) => [t.id, t]));
+      return sortThreads(
+        fetched.map((next) => {
+          const old = prevById.get(next.id);
+          if (old?.messagesLoaded) {
+            return {
+              ...next,
+              messages: old.messages,
+              messagesLoaded: true,
+            };
+          }
+          return next;
+        }),
+      );
+    },
+    [sortThreads],
   );
 
-  const deleteProduct = useCallback(
-    (id: string) => setProducts((prev) => prev.filter((p) => p.id !== id)),
-    [],
+  const hydrateProfile = useCallback((p: Partial<StoreProfile> | StoreProfile) => {
+    setProfileState((prev) => ({ ...prev, ...p }));
+    setStoreReady(true);
+  }, []);
+
+  const resetProfile = useCallback(() => {
+    setProfileState(emptyStoreProfile());
+    setStoreReady(false);
+  }, []);
+
+  const refreshStore = useCallback(async () => {
+    const store = await fetchStore();
+    const next = apiStoreToProfile(store);
+    setProfileState(next);
+    setStoreReady(true);
+    return next;
+  }, []);
+
+  const updateStore = useCallback(async (p: Partial<StoreProfile>) => {
+    const store = await patchStore(p);
+    const next = apiStoreToProfile(store);
+    setProfileState(next);
+    setStoreReady(true);
+    return next;
+  }, []);
+
+  const toggleStoreOpen = useCallback(async () => {
+    let previous = true;
+    setProfileState((prev) => {
+      previous = prev.open;
+      return { ...prev, open: !prev.open };
+    });
+    try {
+      const store = await patchStore({ open: !previous });
+      const next = apiStoreToProfile(store);
+      setProfileState(next);
+      return next;
+    } catch (err) {
+      setProfileState((prev) => ({ ...prev, open: previous }));
+      throw err;
+    }
+  }, []);
+
+  const resetProducts = useCallback(() => {
+    setProducts([]);
+    setProductsReady(false);
+    setProductsLoading(false);
+  }, []);
+
+  const refreshProducts = useCallback(async () => {
+    setProductsLoading(true);
+    try {
+      const list = await fetchProducts();
+      const next = list.map((row) => mapProduct(apiProductToProduct(row)));
+      setProducts(next);
+      setProductsReady(true);
+      return next;
+    } finally {
+      setProductsLoading(false);
+    }
+  }, [mapProduct]);
+
+  const createProductEntry = useCallback(
+    async (draft: ProductWriteBody) => {
+      const created = mapProduct(apiProductToProduct(await createProductApi(draft)));
+      setProducts((prev) => [created, ...prev]);
+      setProductsReady(true);
+      return created;
+    },
+    [mapProduct],
+  );
+
+  const updateProductEntry = useCallback(
+    async (id: string, draft: ProductWriteBody) => {
+      try {
+        const updated = mapProduct(apiProductToProduct(await updateProductApi(id, draft)));
+        setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshProducts();
+          throw new ApiError("This product no longer exists.", 404, err.body);
+        }
+        throw err;
+      }
+    },
+    [mapProduct, refreshProducts],
+  );
+
+  const removeProduct = useCallback(
+    async (id: string) => {
+      let removed: Product | undefined;
+      setProducts((prev) => {
+        removed = prev.find((p) => p.id === id);
+        return prev.filter((p) => p.id !== id);
+      });
+      try {
+        await deleteProductApi(id);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshProducts();
+          throw new ApiError("This product no longer exists.", 404, err.body);
+        }
+        if (removed) {
+          setProducts((prev) => {
+            if (prev.some((p) => p.id === removed!.id)) return prev;
+            return [removed!, ...prev];
+          });
+        }
+        throw err;
+      }
+    },
+    [refreshProducts],
   );
 
   const toggleProduct = useCallback(
-    (id: string) =>
-      setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, active: !p.active } : p))),
-    [],
+    async (id: string) => {
+      let previousActive = true;
+      setProducts((prev) =>
+        prev.map((p) => {
+          if (p.id !== id) return p;
+          previousActive = p.active;
+          return { ...p, active: !p.active };
+        }),
+      );
+      try {
+        const updated = mapProduct(apiProductToProduct(await toggleProductActive(id)));
+        setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshProducts();
+          throw new ApiError("This product no longer exists.", 404, err.body);
+        }
+        setProducts((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, active: previousActive } : p)),
+        );
+        throw err;
+      }
+    },
+    [mapProduct, refreshProducts],
   );
 
+  const importProductsCsvFile = useCallback(
+    async (file: File) => {
+      const result = await importProductsCsv(file);
+      await refreshProducts();
+      return { created: result.created };
+    },
+    [refreshProducts],
+  );
+
+  const resetOrders = useCallback(() => {
+    setOrders([]);
+    setOrdersReady(false);
+    setOrdersLoading(false);
+  }, []);
+
+  const refreshOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    try {
+      const list = await fetchOrders();
+      const next = list.map((row) => mapOrder(apiOrderToOrder(row)));
+      setOrders(next);
+      setOrdersReady(true);
+      return next;
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [mapOrder]);
+
+  const resetCustomers = useCallback(() => {
+    setCustomers([]);
+    setCustomersReady(false);
+    setCustomersLoading(false);
+  }, []);
+
+  const refreshCustomers = useCallback(async () => {
+    setCustomersLoading(true);
+    try {
+      const list = await fetchCustomers();
+      const next = list.map(apiCustomerToCustomer);
+      setCustomers(next);
+      setCustomersReady(true);
+      return next;
+    } finally {
+      setCustomersLoading(false);
+    }
+  }, []);
+
+  const createOrderEntry = useCallback(
+    async (body: unknown) => {
+      const created = mapOrder(apiOrderToOrder(await createOrderApi(body)));
+      setOrders((prev) => [created, ...prev]);
+      setOrdersReady(true);
+      setNewOrderCount((n) => n + 1);
+      return created;
+    },
+    [mapOrder],
+  );
+
+  const upsertCustomerEntry = useCallback(async (input: { name: string; phone: string }) => {
+    const saved = apiCustomerToCustomer(await upsertCustomer(input));
+    setCustomers((prev) => {
+      const without = prev.filter((c) => c.id !== saved.id && c.phone !== saved.phone);
+      return [saved, ...without];
+    });
+    setCustomersReady(true);
+    return saved;
+  }, []);
+
   const setOrderStatus = useCallback(
-    (id: string, status: FollowUpStatus) =>
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o))),
-    [],
+    async (id: string, status: FollowUpStatus) => {
+      let previous: FollowUpStatus = "Pending";
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          previous = o.status;
+          return { ...o, status };
+        }),
+      );
+      try {
+        const updated = mapOrder(apiOrderToOrder(await patchOrder(id, { status })));
+        setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshOrders();
+          throw new ApiError("This order no longer exists.", 404, err.body);
+        }
+        setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: previous } : o)));
+        throw err;
+      }
+    },
+    [mapOrder, refreshOrders],
   );
 
   const setPickup = useCallback(
-    (id: string, pickup: CustomerOrder["pickup"]) =>
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, pickup } : o))),
-    [],
+    async (id: string, pickup: CustomerOrder["pickup"]) => {
+      let previous: CustomerOrder["pickup"] = "Unmatched";
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id !== id) return o;
+          previous = o.pickup;
+          return { ...o, pickup };
+        }),
+      );
+      try {
+        const updated = mapOrder(apiOrderToOrder(await patchOrder(id, { pickup })));
+        setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshOrders();
+          throw new ApiError("This order no longer exists.", 404, err.body);
+        }
+        setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, pickup: previous } : o)));
+        throw err;
+      }
+    },
+    [mapOrder, refreshOrders],
   );
+
+  const createCounterOrder = useCallback(
+    async (input: { phone: string; productId: string; customer?: string }) => {
+      const product = products.find((p) => p.id === input.productId);
+      if (!product) {
+        throw new ApiError("Select a product from inventory.", 400, null);
+      }
+      const normalized = input.phone.replace(/\D/g, "").replace(/^0/, "254");
+      const known =
+        orders.find((o) => o.phone === normalized) ||
+        customers.find((c) => c.phone === normalized) ||
+        threads.find((t) => t.phone === normalized);
+      const channel: Channel = known ? "in-app" : "offline-sms";
+      const body = buildCounterOrderBody({
+        productId: Number(product.id),
+        productPrice: product.price,
+        phone: normalized,
+        customerName: input.customer,
+        channel,
+      });
+      const order = await createOrderEntry(body);
+      void refreshCustomers().catch(() => undefined);
+      return { order, channel };
+    },
+    [products, orders, customers, threads, createOrderEntry, refreshCustomers],
+  );
+
+  const chargeCounterOrder = useCallback(async (input: { orderId: string; phone: string }) => {
+    const id = input.orderId;
+    if (chargingOrderIds.current.has(id)) {
+      throw new ApiError("A charge is already in progress for this order.", 409, null);
+    }
+    chargingOrderIds.current.add(id);
+    try {
+      return await chargeOrder({ orderId: id, phone: input.phone });
+    } finally {
+      chargingOrderIds.current.delete(id);
+    }
+  }, []);
+
+  const createStoreSubaccount = useCallback(async () => {
+    const res = await createSubaccount();
+    const next = apiStoreToProfile(res.store);
+    setProfileState(next);
+    setStoreReady(true);
+    return {
+      created: res.created,
+      subaccountCode: res.subaccount_code,
+      profile: next,
+    };
+  }, []);
+
+  const resetWeeklySales = useCallback(() => {
+    setWeeklySales([]);
+    setWeeklySalesReady(false);
+    setWeeklySalesLoading(false);
+  }, []);
+
+  const refreshWeeklySales = useCallback(async () => {
+    setWeeklySalesLoading(true);
+    try {
+      const list = await fetchWeeklySales();
+      setWeeklySales(list);
+      setWeeklySalesReady(true);
+      return list;
+    } finally {
+      setWeeklySalesLoading(false);
+    }
+  }, []);
+
+  const resetThreads = useCallback(() => {
+    setThreads([]);
+    setThreadsReady(false);
+    setThreadsLoading(false);
+    setOpenThreadId(null);
+  }, []);
+
+  const refreshThreads = useCallback(async () => {
+    setThreadsLoading(true);
+    try {
+      const list = (await fetchThreads()).map((row) => mapThread(apiThreadToThread(row)));
+      setThreads((prev) => mergeThreadList(list, prev));
+      setThreadsReady(true);
+      return mergeThreadList(list, threadsRef.current);
+    } finally {
+      setThreadsLoading(false);
+    }
+  }, [mapThread, mergeThreadList]);
 
   const markRead = useCallback(
     (id: string) => setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t))),
@@ -447,87 +742,162 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   );
 
   const openChat = useCallback(
-    (id: string | null) => {
+    async (id: string | null) => {
       setOpenThreadId(id);
-      if (id) markRead(id);
+      if (!id) return;
+
+      const current = threadsRef.current.find((t) => t.id === id);
+      const previousUnread = current?.unread ?? 0;
+      setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t)));
+
+      if (!current?.messagesLoaded) {
+        try {
+          const detail = mapThread(apiThreadToThread(await fetchThreadDetail(id)));
+          setThreads((prev) =>
+            prev.map((t) =>
+              t.id === id
+                ? {
+                    ...detail,
+                    unread: 0,
+                  }
+                : t,
+            ),
+          );
+        } catch (err) {
+          console.warn("Failed to load thread messages", err);
+        }
+      }
+
+      try {
+        const res = await markThreadRead(id);
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === id ? { ...t, unread: res.unread, updatedAt: res.updated_at } : t,
+          ),
+        );
+      } catch {
+        setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: previousUnread } : t)));
+      }
     },
-    [markRead],
+    [mapThread],
   );
 
-  const sendMessage = useCallback((threadId: string, text: string) => {
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              unread: 0,
-              messages: [...t.messages, { id: uid(), from: "store", text, time: nowTime() }],
-            }
-          : t,
-      ),
-    );
-  }, []);
+  const sendMessage = useCallback(
+    async (threadId: string, text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
 
-  const startThread = useCallback(
-    (farmer: string, phone: string, channel: Channel, topic: string, text: string) => {
-      setThreads((prev) => {
-        const existing = prev.find((t) => t.phone === phone);
-        if (existing) {
-          return prev.map((t) =>
-            t.id === existing.id
+      const tempId = `tmp-${uid()}`;
+      const nowIso = new Date().toISOString();
+      const optimistic: ChatMessage = {
+        id: tempId,
+        from: "store",
+        text: trimmed,
+        time: nowTime(),
+        createdAt: nowIso,
+      };
+
+      setThreads((prev) =>
+        sortThreads(
+          prev.map((t) =>
+            t.id === threadId
               ? {
                   ...t,
-                  messages: [...t.messages, { id: uid(), from: "store", text, time: nowTime() }],
+                  messages: [...t.messages, optimistic],
+                  lastMessage: optimistic,
+                  updatedAt: nowIso,
+                  messagesLoaded: true,
                 }
               : t,
-          );
+          ),
+        ),
+      );
+
+      try {
+        const res = await postThreadMessage(threadId, trimmed);
+        const msg = apiMessageToMessage(res.message);
+        setThreads((prev) =>
+          sortThreads(
+            prev.map((t) =>
+              t.id === threadId
+                ? {
+                    ...t,
+                    unread: res.thread.unread,
+                    updatedAt: res.thread.updated_at,
+                    messages: t.messages.map((m) => (m.id === tempId ? msg : m)),
+                    lastMessage: msg,
+                    messagesLoaded: true,
+                  }
+                : t,
+            ),
+          ),
+        );
+      } catch (err) {
+        setThreads((prev) =>
+          prev.map((t) =>
+            t.id === threadId
+              ? {
+                  ...t,
+                  messages: t.messages.filter((m) => m.id !== tempId),
+                  lastMessage: t.messages.filter((m) => m.id !== tempId).at(-1) ?? t.lastMessage,
+                }
+              : t,
+          ),
+        );
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshThreads();
+          throw new ApiError("This conversation no longer exists.", 404, err.body);
         }
-        return [
-          {
-            id: uid(),
-            farmer,
-            phone,
-            channel,
-            topic,
-            unread: 0,
-            messages: [{ id: uid(), from: "store", text, time: nowTime() }],
-          },
-          ...prev,
-        ];
-      });
+        throw err;
+      }
     },
-    [],
+    [refreshThreads, sortThreads],
   );
 
-  const stkPush = useCallback<Ctx["stkPush"]>(
-    ({ phone, amount, product, customer }) => {
-      const normalized = phone.replace(/\D/g, "").replace(/^0/, "254");
-      const known = orders.find((o) => o.phone === normalized) ?? threads.find((t) => t.phone === normalized);
-      const channel: Channel = known ? "in-app" : "offline-sms";
-      const code = "SG" + uid().toUpperCase().slice(0, 8);
-      const d = new Date();
-      setOrders((prev) => [
-        {
-          id: uid(),
-          customer: customer?.trim() || (known && "farmer" in known ? known.farmer : known?.customer) || "Counter Customer",
-          phone: normalized,
-          product,
-          items: [{ name: product, qty: 1, price: amount }],
-          date: d.toISOString().slice(0, 10),
-          time: nowTime(),
-          mpesaCode: code,
-          amount,
-          status: "Pending",
-          channel,
-          orderType: "Counter Pickup",
-          pickup: "Awaiting Pickup",
-        },
-        ...prev,
-      ]);
-      setNewOrderCount((n) => n + 1);
-      return { channel, code };
+  const startThread = useCallback(
+    async (input: {
+      customerId?: string;
+      name: string;
+      phone: string;
+      channel: Channel;
+      topic: string;
+      text: string;
+    }) => {
+      let customerId = (input.customerId || "").trim();
+      if (!customerId) {
+        const saved = await upsertCustomerEntry({
+          name: input.name,
+          phone: input.phone,
+        });
+        customerId = saved.id;
+      }
+
+      const digits = (p: string) => p.replace(/\D/g, "").replace(/^0/, "254");
+      const existing =
+        threadsRef.current.find((t) => t.customerId && t.customerId === customerId) ||
+        threadsRef.current.find((t) => digits(t.phone) === digits(input.phone));
+
+      if (existing) {
+        await sendMessage(existing.id, input.text);
+        const updated = threadsRef.current.find((t) => t.id === existing.id) ?? existing;
+        return updated;
+      }
+
+      const created = mapThread(
+        apiThreadToThread(
+          await createThreadApi({
+            customer_id: Number(customerId),
+            topic: input.topic,
+            channel: input.channel,
+            ...(input.text.trim() ? { message: input.text.trim() } : {}),
+          }),
+        ),
+      );
+      setThreads((prev) => sortThreads([created, ...prev.filter((t) => t.id !== created.id)]));
+      setThreadsReady(true);
+      return created;
     },
-    [orders, threads],
+    [mapThread, sendMessage, sortThreads, upsertCustomerEntry],
   );
 
   const enablePush = useCallback(() => {
@@ -540,45 +910,46 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Simulated realtime channel (stands in for Supabase Realtime / WebSocket feed)
   const [incoming, setIncoming] = useState<{ thread: Thread; text: string; key: string } | null>(
     null,
   );
 
+  // Poll for farmer-side updates (no farmer API yet — normally idle until admin seeds unread).
   useEffect(() => {
-    if (!profile.open) return;
-    const timer = window.setInterval(() => {
-      const f = farmerPool[Math.floor(Math.random() * farmerPool.length)]!;
-      const text = inquiryLines[Math.floor(Math.random() * inquiryLines.length)]!;
-      const msg: ChatMessage = { id: uid(), from: "farmer", text, time: nowTime() };
-      let delivered: Thread | null = null;
-      setThreads((prev) => {
-        const existing = prev.find((t) => t.phone === f.phone);
-        if (existing) {
-          delivered = {
-            ...existing,
-            unread: existing.unread + 1,
-            messages: [...existing.messages, msg],
-          };
-          return prev.map((t) => (t.id === existing.id ? delivered! : t));
+    if (!threadsReady) return;
+
+    const poll = async () => {
+      if (!getAccessToken()) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      try {
+        const list = (await fetchThreads()).map((row) => mapThread(apiThreadToThread(row)));
+        const prev = threadsRef.current;
+        const prevById = new Map(prev.map((t) => [t.id, t]));
+
+        for (const next of list) {
+          const old = prevById.get(next.id);
+          const last = next.lastMessage;
+          const isNewFarmer =
+            last?.from === "farmer" &&
+            (!old || old.lastMessage?.id !== last.id || next.unread > (old.unread ?? 0));
+          if (isNewFarmer && last) {
+            setIncoming({ thread: next, text: last.text, key: uid() });
+            break;
+          }
         }
-        delivered = {
-          id: uid(),
-          farmer: f.name,
-          phone: f.phone,
-          channel: "in-app",
-          topic: f.topic,
-          unread: 1,
-          messages: [msg],
-        };
-        return [delivered, ...prev];
-      });
-      window.setTimeout(() => {
-        if (delivered) setIncoming({ thread: delivered, text, key: uid() });
-      }, 0);
-    }, 25000);
+
+        setThreads((current) => mergeThreadList(list, current));
+      } catch (err) {
+        console.warn("Thread poll failed", err);
+      }
+    };
+
+    const timer = window.setInterval(() => {
+      void poll();
+    }, 50000);
+
     return () => window.clearInterval(timer);
-  }, [profile.open]);
+  }, [threadsReady, mapThread, mergeThreadList]);
 
   useEffect(() => {
     if (!incoming) return;
@@ -594,25 +965,57 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       profile,
-      setProfile,
+      storeReady,
+      hydrateProfile,
+      resetProfile,
+      refreshStore,
+      updateStore,
+      toggleStoreOpen,
       products,
-      saveProduct,
-      importProducts,
-      deleteProduct,
+      productsReady,
+      productsLoading,
+      refreshProducts,
+      createProductEntry,
+      updateProductEntry,
+      removeProduct,
       toggleProduct,
+      importProductsCsvFile,
+      resetProducts,
       orders,
+      ordersReady,
+      ordersLoading,
+      customers,
+      customersReady,
+      customersLoading,
+      refreshOrders,
+      resetOrders,
+      refreshCustomers,
+      resetCustomers,
+      createOrderEntry,
+      createCounterOrder,
+      chargeCounterOrder,
+      createStoreSubaccount,
+      weeklySales,
+      weeklySalesReady,
+      weeklySalesLoading,
+      refreshWeeklySales,
+      resetWeeklySales,
       setOrderStatus,
       setPickup,
+      upsertCustomerEntry,
       newOrderCount,
       clearNewOrders: () => setNewOrderCount(0),
       threads,
+      threadsReady,
+      threadsLoading,
+      refreshThreads,
+      resetThreads,
       unreadMessages,
       openThreadId,
       openChat,
       markRead,
       sendMessage,
       startThread,
-      stkPush,
       lastIncoming: incoming,
       soundOn,
       setSoundOn,
@@ -620,24 +1023,56 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }),
     [
       profile,
-      setProfile,
+      storeReady,
+      hydrateProfile,
+      resetProfile,
+      refreshStore,
+      updateStore,
+      toggleStoreOpen,
       products,
-      saveProduct,
-      importProducts,
-      deleteProduct,
+      productsReady,
+      productsLoading,
+      refreshProducts,
+      createProductEntry,
+      updateProductEntry,
+      removeProduct,
       toggleProduct,
+      importProductsCsvFile,
+      resetProducts,
       orders,
+      ordersReady,
+      ordersLoading,
+      customers,
+      customersReady,
+      customersLoading,
+      refreshOrders,
+      resetOrders,
+      refreshCustomers,
+      resetCustomers,
+      createOrderEntry,
+      createCounterOrder,
+      chargeCounterOrder,
+      createStoreSubaccount,
+      weeklySales,
+      weeklySalesReady,
+      weeklySalesLoading,
+      refreshWeeklySales,
+      resetWeeklySales,
       setOrderStatus,
       setPickup,
+      upsertCustomerEntry,
       newOrderCount,
       threads,
+      threadsReady,
+      threadsLoading,
+      refreshThreads,
+      resetThreads,
       unreadMessages,
       openThreadId,
       openChat,
       markRead,
       sendMessage,
       startThread,
-      stkPush,
       incoming,
       soundOn,
       enablePush,

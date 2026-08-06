@@ -1,12 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  MessagesSquare,
-  Package,
-  Receipt,
-  TrendingUp,
-  Users,
-} from "lucide-react";
+import { AlertTriangle, MessagesSquare, Package, Receipt, TrendingUp, Users } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -24,7 +17,7 @@ import { PortalLayout } from "@/components/portal/PortalLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatKES, stockStatus, usePortal, weeklySales } from "@/lib/portal-store";
+import { formatKES, prepareWeeklySalesChartRows, stockStatus, usePortal } from "@/lib/portal-store";
 import { ChannelBadge } from "@/components/portal/ChatDrawer";
 
 export const Route = createFileRoute("/")({
@@ -49,24 +42,64 @@ export const Route = createFileRoute("/")({
 });
 
 function DashboardPage() {
-  const { orders, products, threads, unreadMessages } = usePortal();
+  const {
+    orders,
+    products,
+    threads,
+    unreadMessages,
+    profile,
+    weeklySales,
+    weeklySalesLoading,
+    weeklySalesReady,
+  } = usePortal();
 
   const revenue = orders.reduce((s, o) => s + o.amount, 0);
   const pending = orders.filter((o) => o.status === "Pending").length;
   const alerts = products.filter((p) => stockStatus(p) !== "In Stock");
 
-  const trend = weeklySales.map((w) => ({
+  const chartRows = prepareWeeklySalesChartRows(weeklySales);
+  const weekCount = chartRows.length;
+  const trend = chartRows.map((w) => ({
     week: w.week,
     Revenue: w.Fertilizer + w.Seeds + w["Vet Supplies"] + w.Pesticides,
   }));
 
+  const storeLabel = profile.name || "Your store";
+  const subtitle =
+    weekCount > 0
+      ? `${storeLabel} · last ${weekCount} week${weekCount === 1 ? "" : "s"}`
+      : `${storeLabel} · weekly sales`;
+
+  const chartsBusy = weeklySalesLoading && !weeklySalesReady;
+  const chartsEmpty = weeklySalesReady && chartRows.length === 0;
+
   return (
-    <PortalLayout title="Dashboard Overview" subtitle="Green Valley Agrovet · last 6 weeks">
+    <PortalLayout title="Dashboard Overview" subtitle={subtitle}>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric icon={TrendingUp} label="Total revenue" value={formatKES(revenue)} note="All recorded M-Pesa sales" />
-        <Metric icon={Package} label="Active products" value={String(products.filter((p) => p.active).length)} note={`${alerts.length} need attention`} />
-        <Metric icon={MessagesSquare} label="Unread messages" value={String(unreadMessages)} note={`${threads.length} farmer conversations`} />
-        <Metric icon={Users} label="Pending follow-ups" value={String(pending)} note="Customers awaiting a check-in" />
+        <Metric
+          icon={TrendingUp}
+          label="Total revenue"
+          value={formatKES(revenue)}
+          note="All recorded M-Pesa sales"
+        />
+        <Metric
+          icon={Package}
+          label="Active products"
+          value={String(products.filter((p) => p.active).length)}
+          note={`${alerts.length} need attention`}
+        />
+        <Metric
+          icon={MessagesSquare}
+          label="Unread messages"
+          value={String(unreadMessages)}
+          note={`${threads.length} farmer conversations`}
+        />
+        <Metric
+          icon={Users}
+          label="Pending follow-ups"
+          value={String(pending)}
+          note="Customers awaiting a check-in"
+        />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
@@ -75,19 +108,39 @@ function DashboardPage() {
             <CardTitle className="text-base">Weekly sales by category</CardTitle>
           </CardHeader>
           <CardContent className="h-72 pl-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklySales}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
-                <XAxis dataKey="week" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
-                <Tooltip formatter={(v: number) => formatKES(v)} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Fertilizer" stackId="a" fill="var(--color-primary)" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="Seeds" stackId="a" fill="var(--color-success)" />
-                <Bar dataKey="Vet Supplies" stackId="a" fill="var(--color-info)" />
-                <Bar dataKey="Pesticides" stackId="a" fill="var(--color-warning)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {chartsBusy ? (
+              <p className="grid h-full place-items-center text-sm text-muted-foreground">
+                Loading weekly sales…
+              </p>
+            ) : chartsEmpty ? (
+              <p className="grid h-full place-items-center text-sm text-muted-foreground">
+                No sales recorded yet
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartRows}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
+                  <XAxis dataKey="week" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
+                  <Tooltip formatter={(v: number) => formatKES(v)} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar
+                    dataKey="Fertilizer"
+                    stackId="a"
+                    fill="var(--color-primary)"
+                    radius={[0, 0, 0, 0]}
+                  />
+                  <Bar dataKey="Seeds" stackId="a" fill="var(--color-success)" />
+                  <Bar dataKey="Vet Supplies" stackId="a" fill="var(--color-info)" />
+                  <Bar
+                    dataKey="Pesticides"
+                    stackId="a"
+                    fill="var(--color-warning)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -96,15 +149,31 @@ function DashboardPage() {
             <CardTitle className="text-base">Revenue trend</CardTitle>
           </CardHeader>
           <CardContent className="h-72 pl-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
-                <XAxis dataKey="week" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
-                <Tooltip formatter={(v: number) => formatKES(v)} />
-                <Line type="monotone" dataKey="Revenue" stroke="var(--color-primary)" strokeWidth={2.5} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            {chartsBusy ? (
+              <p className="grid h-full place-items-center text-sm text-muted-foreground">
+                Loading…
+              </p>
+            ) : chartsEmpty ? (
+              <p className="grid h-full place-items-center text-sm text-muted-foreground">
+                No sales recorded yet
+              </p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
+                  <XAxis dataKey="week" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
+                  <Tooltip formatter={(v: number) => formatKES(v)} />
+                  <Line
+                    type="monotone"
+                    dataKey="Revenue"
+                    stroke="var(--color-primary)"
+                    strokeWidth={2.5}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -125,7 +194,7 @@ function DashboardPage() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{p.name}</span>
                   <span className="block text-xs text-muted-foreground">
-                    {p.stock} in stock · expires {p.expiry}
+                    {p.stock} in stock · {p.expiry ? `expires ${p.expiry}` : "no expiry date"}
                   </span>
                 </span>
                 <Badge variant="secondary" className="shrink-0">
@@ -134,7 +203,9 @@ function DashboardPage() {
               </div>
             ))}
             {!alerts.length && (
-              <p className="py-6 text-center text-sm text-muted-foreground">All stock is healthy.</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                All stock is healthy.
+              </p>
             )}
             <Button asChild variant="outline" size="sm" className="w-full">
               <Link to="/inventory">Manage inventory</Link>
@@ -150,7 +221,10 @@ function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {orders.slice(0, 5).map((o) => (
-              <div key={o.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 p-2.5">
+              <div
+                key={o.id}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 p-2.5"
+              >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{o.customer}</span>
                   <span className="block truncate text-xs text-muted-foreground">

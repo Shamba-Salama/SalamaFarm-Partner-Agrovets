@@ -1,9 +1,10 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   BellOff,
   FileDown,
   LayoutDashboard,
+  LogOut,
   MessagesSquare,
   Package,
   Receipt,
@@ -18,6 +19,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { ApiError } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
+import { formatApiError } from "@/lib/format-api-error";
 import { usePortal } from "@/lib/portal-store";
 import { ChatDrawer } from "@/components/portal/ChatDrawer";
 import { StkPushDialog } from "@/components/portal/StkPushDialog";
@@ -29,7 +33,7 @@ const nav = [
   { to: "/messages", label: "Messages", icon: MessagesSquare, badge: "messages" },
   { to: "/orders", label: "Orders", icon: Receipt, badge: "orders" },
   { to: "/customers", label: "Follow-Ups", icon: Users, badge: "none" },
-  { to: "/onboarding", label: "Store Profile", icon: Store, badge: "none" },
+  { to: "/settings", label: "Settings", icon: Store, badge: "none" },
 ] as const;
 
 export function PortalLayout({
@@ -44,10 +48,19 @@ export function PortalLayout({
   children: ReactNode;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { profile, setProfile, unreadMessages, newOrderCount, openChat, lastIncoming, soundOn, setSoundOn, enablePush } =
+  const navigate = useNavigate();
+  const { isAuthenticated, isBootstrapping, logout, vendor } = useAuth();
+  const { profile, toggleStoreOpen, unreadMessages, newOrderCount, openChat, lastIncoming, soundOn, setSoundOn, enablePush } =
     usePortal();
   const [stkOpen, setStkOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [togglingOpen, setTogglingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isBootstrapping && !isAuthenticated) {
+      void navigate({ to: "/login" });
+    }
+  }, [isAuthenticated, isBootstrapping, navigate]);
 
   useEffect(() => {
     enablePush();
@@ -66,6 +79,26 @@ export function PortalLayout({
   const badgeFor = (kind: string) =>
     kind === "messages" ? unreadMessages : kind === "orders" ? newOrderCount : 0;
 
+  const onToggleOpen = async () => {
+    if (togglingOpen) return;
+    setTogglingOpen(true);
+    try {
+      await toggleStoreOpen();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? formatApiError(err) : "Could not update store status.");
+    } finally {
+      setTogglingOpen(false);
+    }
+  };
+
+  if (isBootstrapping || !isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        {isBootstrapping ? "Loading…" : "Redirecting to sign in…"}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col bg-sidebar px-3 py-5 lg:flex">
@@ -82,15 +115,29 @@ export function PortalLayout({
             />
           ))}
         </nav>
-        <div className="rounded-xl bg-sidebar-accent/60 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-sidebar-foreground">Alert sounds</span>
-            <Switch checked={soundOn} onCheckedChange={setSoundOn} />
+        <div className="space-y-3">
+          {vendor?.email ? (
+            <p className="truncate px-2 text-[11px] text-sidebar-foreground/70">{vendor.email}</p>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2 text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={() => logout()}
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </Button>
+          <div className="rounded-xl bg-sidebar-accent/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-sidebar-foreground">Alert sounds</span>
+              <Switch checked={soundOn} onCheckedChange={setSoundOn} />
+            </div>
+            <p className="mt-1 flex items-center gap-1.5 text-[11px] text-sidebar-foreground/70">
+              {soundOn ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+              Chime + push on new farmer messages
+            </p>
           </div>
-          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-sidebar-foreground/70">
-            {soundOn ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
-            Chime + push on new farmer messages
-          </p>
         </div>
       </aside>
 
@@ -109,12 +156,15 @@ export function PortalLayout({
 
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setProfile({ open: !profile.open })}
+                type="button"
+                disabled={togglingOpen}
+                onClick={() => void onToggleOpen()}
                 className={cn(
                   "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
                   profile.open
                     ? "border-success/40 bg-success/10 text-success"
                     : "border-destructive/40 bg-destructive/10 text-destructive",
+                  togglingOpen && "opacity-70",
                 )}
               >
                 Store Status: {profile.open ? "Open 🟢" : "Closed 🔴"}
@@ -127,6 +177,9 @@ export function PortalLayout({
                 <FileDown className="mr-1.5 h-4 w-4" />
                 <span className="hidden md:inline">Export Sales Report</span>
                 <span className="md:hidden">Export</span>
+              </Button>
+              <Button size="sm" variant="outline" className="lg:hidden" onClick={() => logout()}>
+                <LogOut className="h-4 w-4" />
               </Button>
               {actions}
             </div>
@@ -193,7 +246,7 @@ function NavItem({
 }: {
   to: string;
   label: string;
-  icon: typeof Store;
+  icon: typeof LayoutDashboard;
   active: boolean;
   count: number;
 }) {
@@ -220,12 +273,26 @@ function NavItem({
 
 function WelcomeBanner() {
   const { profile } = usePortal();
+  const verified = profile.onboarded;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-success px-4 py-2 text-xs font-medium text-success-foreground sm:px-6">
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs font-medium sm:px-6",
+        verified
+          ? "bg-success text-success-foreground"
+          : "bg-amber-600 text-white",
+      )}
+    >
       <Sprout className="h-4 w-4" />
-      <span>Welcome to SalamaFarm Partner Portal! Start listing your inventory.</span>
-      <span className="opacity-80">
-        {profile.name} · {profile.town}, {profile.county} · Till {profile.till}
+      <span>
+        {verified ? "Verified Merchant ✅" : "Pending Verification ⏳"}
+      </span>
+      <span className="opacity-90">
+        {profile.name || "Your store"}
+        {profile.town || profile.county
+          ? ` · ${[profile.town, profile.county].filter(Boolean).join(", ")}`
+          : ""}
+        {profile.till ? ` · Till ${profile.till}` : ""}
       </span>
     </div>
   );

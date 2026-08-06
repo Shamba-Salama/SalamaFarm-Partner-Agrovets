@@ -16,9 +16,22 @@ dist-ssr
 .nitro
 *.local
 
+# Frontend env (keep .env.example)
+.env
+.env.*.local
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+
+# Django backend
+backend/.venv/
+backend/.env
+backend/db.sqlite3
+backend/media/
+backend/staticfiles/
+backend/**/__pycache__/
+backend/**/*.py[cod]
 
 # Editor directories and files
 .vscode/*

@@ -21,6 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CATEGORIES, formatKES, usePortal, type Category, type Product } from "@/lib/portal-store";
+import { ApiError } from "@/lib/api-client";
+import { formatApiError } from "@/lib/format-api-error";
 import { downloadFile } from "@/lib/export";
 import { cn } from "@/lib/utils";
 
@@ -39,22 +41,24 @@ const TEMPLATE = [
   "Sukari F1 Tomato Seeds 10g,Seeds,2400,17,10g sachet,2027-01-18",
 ].join("\n");
 
-function parseCsv(text: string): Product[] {
+/** Client-side CSV parse for the PREVIEW TABLE ONLY — server is authoritative on confirm. */
+function parseCsvPreview(text: string): Product[] {
   const lines = text.trim().split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) return [];
   const head = lines[0]!.split(",").map((h) => h.trim().toLowerCase());
-  return lines.slice(1).map((line) => {
+  return lines.slice(1).map((line, idx) => {
     const cells = line.split(",").map((c) => c.trim());
     const get = (k: string) => cells[head.indexOf(k)] ?? "";
     const cat = get("category") as Category;
+    const expiryRaw = get("expiry_date");
     return {
-      id: Math.random().toString(36).slice(2, 10),
+      id: `preview-${idx}`,
       name: get("product_name"),
       category: CATEGORIES.includes(cat) ? cat : "Fertilizer",
       description: get("unit_description"),
       price: Number(get("price_kes")) || 0,
       stock: Number(get("stock_quantity")) || 0,
-      expiry: get("expiry_date") || "2027-01-01",
+      expiry: expiryRaw || null,
       image: "📦",
       active: true,
     } satisfies Product;
@@ -68,26 +72,46 @@ export function CsvImportDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const { importProducts } = usePortal();
+  const { importProductsCsvFile } = usePortal();
   const [rows, setRows] = useState<Product[]>([]);
   const [fileName, setFileName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [importing, setImporting] = useState(false);
 
-  const readFile = (file: File) => {
-    setFileName(file.name);
+  const readFile = (f: File) => {
+    setFile(f);
+    setFileName(f.name);
     const reader = new FileReader();
     reader.onload = () => {
-      const parsed = parseCsv(String(reader.result)).filter((p) => p.name);
+      const parsed = parseCsvPreview(String(reader.result)).filter((p) => p.name);
       setRows(parsed);
       if (!parsed.length) toast.error("No valid rows found — check your column headers");
     };
-    reader.readAsText(file);
+    reader.readAsText(f);
   };
 
   const close = () => {
     onOpenChange(false);
     setRows([]);
     setFileName("");
+    setFile(null);
+    setImporting(false);
+  };
+
+  const onConfirm = async () => {
+    if (!file || importing) return;
+    setImporting(true);
+    try {
+      const { created } = await importProductsCsvFile(file);
+      toast.success(`${created} products added to inventory`);
+      close();
+    } catch (err) {
+      const detail = err instanceof ApiError ? formatApiError(err) : "Import failed.";
+      toast.error(`${detail} Nothing was imported — fix the CSV and try again.`);
+    } finally {
+      setImporting(false);
+    }
   };
 
   return (
@@ -96,7 +120,8 @@ export function CsvImportDialog({
         <DialogHeader>
           <DialogTitle>Import products via CSV</DialogTitle>
           <DialogDescription>
-            Bulk-load your whole shelf in one upload. Use the template so the columns match.
+            Bulk-load your whole shelf in one upload. Use the template so the columns match. Preview
+            is client-side; the server validates and imports all rows or nothing.
           </DialogDescription>
         </DialogHeader>
 
@@ -123,14 +148,14 @@ export function CsvImportDialog({
           }}
           className={cn(
             "flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed p-8 text-center transition-colors",
-            dragging ? "border-primary bg-primary-soft" : "border-border bg-muted/40 hover:bg-muted",
+            dragging
+              ? "border-primary bg-primary-soft"
+              : "border-border bg-muted/40 hover:bg-muted",
           )}
         >
           <UploadCloud className="h-7 w-7 text-primary" />
           <span className="text-sm font-medium">Drag & drop your CSV here, or tap to browse</span>
-          <span className="text-xs text-muted-foreground">
-            Columns: {HEADERS.join(", ")}
-          </span>
+          <span className="text-xs text-muted-foreground">Columns: {HEADERS.join(", ")}</span>
           <input
             type="file"
             accept=".csv,text/csv"
@@ -147,7 +172,7 @@ export function CsvImportDialog({
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <FileSpreadsheet className="h-4 w-4 text-primary" />
               <span className="min-w-0 truncate font-medium">{fileName}</span>
-              <Badge variant="secondary">{rows.length} products parsed</Badge>
+              <Badge variant="secondary">{rows.length} products parsed (preview)</Badge>
             </div>
             <div className="max-h-64 overflow-auto rounded-lg border border-border">
               <Table>
@@ -165,9 +190,13 @@ export function CsvImportDialog({
                     <TableRow key={r.id}>
                       <TableCell className="min-w-[160px] font-medium">{r.name}</TableCell>
                       <TableCell>{r.category}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatKES(r.price)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatKES(r.price)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{r.stock}</TableCell>
-                      <TableCell className="whitespace-nowrap">{r.expiry}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {r.expiry || "No expiry date"}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -177,19 +206,15 @@ export function CsvImportDialog({
         )}
 
         <DialogFooter className="flex-row gap-2">
-          <Button variant="outline" className="flex-1" onClick={close}>
+          <Button variant="outline" className="flex-1" onClick={close} disabled={importing}>
             Cancel
           </Button>
           <Button
             className="flex-1"
-            disabled={!rows.length}
-            onClick={() => {
-              importProducts(rows);
-              toast.success(`${rows.length} products added to inventory`);
-              close();
-            }}
+            disabled={!file || !rows.length || importing}
+            onClick={() => void onConfirm()}
           >
-            Confirm & Add Inventory
+            {importing ? "Importing…" : "Confirm & Add Inventory"}
           </Button>
         </DialogFooter>
       </DialogContent>
