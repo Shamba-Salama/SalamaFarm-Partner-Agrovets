@@ -1,6 +1,6 @@
 # SalamaFarm Partner Hub
 
-Create a modern, responsive Web Portal & Vendor Dashboard for "SalamaFarm Partner Agrovets". This portal allows registered agrovet store owners to sign up, verify their store, manage product inventory (CRUD), track direct M-Pesa sales analytics, and conduct post-purchase customer follow-ups.
+This is a modern, responsive Web Portal & Vendor Dashboard for "SalamaFarm Partner Agrovets". This portal allows registered agrovet store owners to sign up, verify their store, manage product inventory (CRUD), track direct M-Pesa sales analytics, and conduct post-purchase customer follow-ups.
 
 Design Style: Clean, professional, SaaS dashboard style using Tailwind CSS, Lucide icons, and a rich agricultural green (#1E5631), crisp white, and clean slate gray color palette.
 
@@ -60,13 +60,11 @@ Design Style: Clean, professional, SaaS dashboard style using Tailwind CSS, Luci
 
 Ensure all components are modular, fully responsive (optimized for both desktop monitors and tablet/mobile screens used at store counters), and seamlessly structured using React / Tailwind CSS.
 
-This project was built with [Lovable](https://lovable.dev).
 
 **Live app**: https://farm-grow-dash.lovable.app
 
 ## Build with Lovable
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/3d1ba51e-2271-4e42-ae1d-bf765f133e8a).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
 - **Stay in sync**: every change made in Lovable is committed straight to this repository.
