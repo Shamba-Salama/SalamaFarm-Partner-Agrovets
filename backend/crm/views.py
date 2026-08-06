@@ -46,9 +46,14 @@ class CustomerViewSet(
             return CustomerDetailSerializer
         return CustomerSerializer
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["store"] = self.get_store()
+        return ctx
+
     def create(self, request, *args, **kwargs):
         store = self.get_store()
-        serializer = CustomerSerializer(data=request.data)
+        serializer = CustomerSerializer(data=request.data, context=self.get_serializer_context())
         serializer.is_valid(raise_exception=True)
         phone = serializer.validated_data["phone"].strip()
         name = serializer.validated_data["name"].strip()
@@ -57,7 +62,7 @@ class CustomerViewSet(
             phone=phone,
             defaults={"name": name},
         )
-        out = CustomerSerializer(customer, context={"request": request})
+        out = CustomerSerializer(customer, context={"request": request, "store": store})
         return Response(
             out.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
