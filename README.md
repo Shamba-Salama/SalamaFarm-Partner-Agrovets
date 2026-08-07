@@ -8,8 +8,6 @@ Vendor portal for registered SalamaFarm agrovet partners: store onboarding, inve
 - **Frontend** — React + TanStack Start / Vite under the repo root
 - **Payments** — Paystack Kenya (subaccounts, M-Pesa charge, webhooks)
 
-Product overview for the original portal goals lives in the sections below; day-to-day setup is here.
-
 ## Prerequisites
 
 - **Node.js** 20+ and **npm** (frontend)
@@ -33,7 +31,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-API: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)  
+API: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 Admin: `/admin/` (`createsuperuser` when needed)
 
 More detail: [`backend/README-BACKEND.md`](backend/README-BACKEND.md).
@@ -49,7 +47,7 @@ npm install
 npm run dev
 ```
 
-Open the URL Vite prints (often `http://127.0.0.1:5173` or `http://localhost:8080`).
+Open the URL Vite prints (often `http://localhost:8080`).
 
 | Script | Purpose |
 |--------|---------|
@@ -60,16 +58,21 @@ Open the URL Vite prints (often `http://127.0.0.1:5173` or `http://localhost:808
 
 The frontend talks to `http://127.0.0.1:8000/api/v1` by default (`VITE_API_BASE_URL` can override).
 
-## Product areas
+## Features
 
-1. **Onboarding & auth** — store registration, JWT login, verified-merchant status  
-2. **Dashboard** — revenue, stock alerts, weekly sales by category, pending follow-ups  
-3. **Inventory** — product CRUD, CSV import, stock/expiry badges  
-4. **Customer care** — orders follow-ups, templated messages into chat threads  
-5. **Sales & M-Pesa log** — counter STK charge, payment status, pickup reconciliation  
-6. **Messages** — store ↔ farmer threads (API-backed)
+**Agrovet onboarding & verification** — 2-step registration (store details, then license/permit upload) with a Verified Merchant / Pending Verification status banner.
 
-Ensure UI stays modular and responsive for desktop and counter tablets.
+**Dashboard & analytics** — revenue, active product count, follow-up counts, and a weekly sales chart by category (Fertilizer, Seeds, Vet Supplies, Pesticides), computed from real order data.
+
+**Inventory management** — full product CRUD with search/filter/sort, CSV bulk import, low-stock and near-expiry badges.
+
+**Customer care / CRM** — post-purchase follow-up tracking (Pending / Contacted / Satisfied), one-tap WhatsApp follow-up messages, direct-call shortcuts.
+
+**M-Pesa transaction reconciliation** — Paystack-mediated counter charges, with M-Pesa confirmation codes matched against orders for fraud prevention at pickup.
+
+**Messaging** — store ↔ farmer chat threads (REST-backed, polling; real-time is a future enhancement).
+
+UI is modular and responsive for desktop monitors and store-counter tablets.
 
 ## License / ownership
 
