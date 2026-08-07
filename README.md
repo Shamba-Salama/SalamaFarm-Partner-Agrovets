@@ -1,82 +1,79 @@
-# SalamaFarm Partner Hub
+# SalamaFarm Partner Agrovets
 
-This is a modern, responsive Web Portal & Vendor Dashboard for "SalamaFarm Partner Agrovets". This portal allows registered agrovet store owners to sign up, verify their store, manage product inventory (CRUD), track direct M-Pesa sales analytics, and conduct post-purchase customer follow-ups.
+Vendor portal for registered SalamaFarm agrovet partners: store onboarding, inventory, M-Pesa (Paystack Kenya) counter sales, farmer messaging, and post-purchase follow-ups.
 
-Design Style: Clean, professional, SaaS dashboard style using Tailwind CSS, Lucide icons, and a rich agricultural green (#1E5631), crisp white, and clean slate gray color palette.
+**Stack**
 
-1. AGROVET ONBOARDING & VERIFICATION FLOW (AUTH PAGE)
+- **Backend** — Django REST API (JWT, multi-tenant store scoping) under `backend/`
+- **Frontend** — React + TanStack Start / Vite under the repo root
+- **Payments** — Paystack Kenya (subaccounts, M-Pesa charge, webhooks)
 
-- Simple 2-Step Registration Form:
+## Prerequisites
 
-  * Step 1: Store Details (Agrovet Name, Physical Location/Town, County, M-Pesa Till/Paybill Number, WhatsApp Phone Number).
+- **Node.js** 20+ and **npm** (frontend)
+- **Python 3.12** for the backend (prefer `/usr/local/bin/python3.12` on macOS Homebrew; do not use an older system Python)
+- Django targets **5.2 LTS** (`Django>=5.2,<5.3`)
 
-  * Step 2: Verification Upload (Upload copy of Business Permit or Agrochemical License) + "Submit for Verification" button.
+## Backend setup
 
-- Status Indicator Banner: Displays "Verified Merchant ✅" or "Pending Verification ⏳" at the top of the dashboard.
+```bash
+cd backend
 
-2. DASHBOARD OVERVIEW & ANALYTICS TAB
+/usr/local/bin/python3.12 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
-- Top Metric Cards:
+pip install -r requirements.txt
 
-  * Total Direct Sales Revenue (KES)
+cp .env.example .env
+# Edit .env — set SECRET_KEY; add PAYSTACK_SECRET_KEY / PAYSTACK_PUBLIC_KEY for payments
 
-  * Active Products Listed
+python manage.py migrate
+python manage.py runserver
+```
 
-  * Total App Customer Visits / Calls Triggered
+API: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
+Admin: `/admin/` (`createsuperuser` when needed)
 
-  * Pending Customer Follow-Ups
+More detail: [`backend/README-BACKEND.md`](backend/README-BACKEND.md).
 
-- Sales Analytics Chart: Recharts bar/line graph showing weekly sales trends and top-performing categories (Fertilizer, Seeds, Vet Supplies, Pesticides).
+Default settings: `config.settings.dev`. CORS for local Vite origins (`5173`, `3000`, `8080`) is configured there.
 
-- Quick Action Buttons: "+ Add New Product", "Toggle Store Status (Open/Closed)", "View M-Pesa Log".
+## Frontend setup
 
-3. PRODUCT INVENTORY MANAGEMENT (FULL C.R.U.D PAGE)
+From the repository root (with the API running on port 8000):
 
-- Interactive Product Table with Search, Filter by Category, and Sorting:
-
-  * Columns: Image Thumbnail, Product Name, Category Badge, Batch/Stock Quantity, Price (KES), Expiry Date, Status (In Stock, Low Stock, Expired), and Actions (Edit / Delete / Toggle Active).
-
-- Modal Drawer for Adding/Editing Products:
-
-  * Form Fields: Product Title, Category Dropdown, Chemical Composition / Usage Instructions, Price in KES, Stock Quantity, Expiry Date, and Product Image Upload slot.
-
-- Smart Inventory Badges: Highlight items in Red if stock < 5 units or if expiry date is within 30 days ("Clearance Candidate").
-
-4. CUSTOMER CARE & POST-PURCHASE FOLLOW-UP HUB (CRM)
-
-- A dedicated CRM table tracking buyers who purchased items from the store via the mobile app:
-
-  * Columns: Customer Name/Phone, Item Purchased, Date of Purchase, M-Pesa Confirmation Code, Follow-Up Status (Pending, Contacted, Satisfied).
-
-- Direct Communication Action Buttons:
-
-  * "One-Tap WhatsApp Follow-Up": Opens WhatsApp with a pre-filled contextual message: "Habari! This is [Store Name]. Just checking in to see if the [Product Name] you bought on [Date] worked well for your farm?"
-
-  * "Direct Call": Phone icon shortcut launching phone dialer.
-
-5. M-PESA TRANSACTION RECONCILIATION LOG
-
-- A simplified log view matching customer-submitted M-Pesa confirmation codes against completed pickups to help store attendants prevent fraud during counter collection.
-
-Ensure all components are modular, fully responsive (optimized for both desktop monitors and tablet/mobile screens used at store counters), and seamlessly structured using React / Tailwind CSS.
-
-
-**Live app**: https://farm-grow-dash.lovable.app
-
-## Build with Lovable
-
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+```bash
+npm install
 npm run dev
 ```
+
+Open the URL Vite prints (often `http://localhost:8080`).
+
+| Script | Purpose |
+|--------|---------|
+| `npm run dev` | Vite / TanStack Start dev server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview production build |
+| `npm run lint` | ESLint |
+
+The frontend talks to `http://127.0.0.1:8000/api/v1` by default (`VITE_API_BASE_URL` can override).
+
+## Features
+
+**Agrovet onboarding & verification** — 2-step registration (store details, then license/permit upload) with a Verified Merchant / Pending Verification status banner.
+
+**Dashboard & analytics** — revenue, active product count, follow-up counts, and a weekly sales chart by category (Fertilizer, Seeds, Vet Supplies, Pesticides), computed from real order data.
+
+**Inventory management** — full product CRUD with search/filter/sort, CSV bulk import, low-stock and near-expiry badges.
+
+**Customer care / CRM** — post-purchase follow-up tracking (Pending / Contacted / Satisfied), one-tap WhatsApp follow-up messages, direct-call shortcuts.
+
+**M-Pesa transaction reconciliation** — Paystack-mediated counter charges, with M-Pesa confirmation codes matched against orders for fraud prevention at pickup.
+
+**Messaging** — store ↔ farmer chat threads (REST-backed, polling; real-time is a future enhancement).
+
+UI is modular and responsive for desktop monitors and store-counter tablets.
+
+## License / ownership
+
+Application code in this repository is owned by the SalamaFarm project maintainers.
