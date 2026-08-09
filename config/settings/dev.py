@@ -17,3 +17,15 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Ensure the dev-mode OTP line (customers.sms) is visible on the runserver console.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "loggers": {
+        "customers": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}

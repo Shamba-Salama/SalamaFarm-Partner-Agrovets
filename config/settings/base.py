@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "crm",
     "messaging",
     "payments",
+    "customers",
 ]
 
 MIDDLEWARE = [
@@ -107,6 +108,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Scoped throttles are applied per-view (customers.throttles); these rates
+    # bound the unauthenticated OTP endpoints (per normalized phone number).
+    "DEFAULT_THROTTLE_RATES": {
+        "otp-request": env("OTP_REQUEST_THROTTLE", default="5/hour"),
+        "otp-verify": env("OTP_VERIFY_THROTTLE", default="10/hour"),
+    },
 }
 
 SIMPLE_JWT = {
@@ -127,3 +134,14 @@ PAYSTACK_DEFAULT_SETTLEMENT_BANK = env("PAYSTACK_DEFAULT_SETTLEMENT_BANK", defau
 # Placeholder marketplace commission: platform keeps 5%, vendor settles ~95%.
 # Easy to change later via env or Paystack update_subaccount.
 PAYSTACK_DEFAULT_PERCENTAGE_CHARGE = env.float("PAYSTACK_DEFAULT_PERCENTAGE_CHARGE", default=5.0)
+
+# Customer phone auth (mobile app)
+# Africa's Talking SMS. Leave AFRICASTALKING_API_KEY blank locally: the OTP is
+# then logged to the console instead of sent (see customers.sms.deliver_otp).
+AFRICASTALKING_USERNAME = env("AFRICASTALKING_USERNAME", default="sandbox")
+AFRICASTALKING_API_KEY = env("AFRICASTALKING_API_KEY", default="")
+AFRICASTALKING_SENDER_ID = env("AFRICASTALKING_SENDER_ID", default="")
+# Force the log-only OTP path even when a key is present (handy in staging).
+OTP_DEV_MODE = env.bool("OTP_DEV_MODE", default=False)
+OTP_TTL_SECONDS = env.int("OTP_TTL_SECONDS", default=300)  # 5 min
+OTP_MAX_ATTEMPTS = env.int("OTP_MAX_ATTEMPTS", default=5)
