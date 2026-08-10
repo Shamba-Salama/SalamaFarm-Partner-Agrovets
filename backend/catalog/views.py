@@ -1,16 +1,21 @@
-"""Store-scoped product API."""
+"""Store-scoped product API + public marketplace browse."""
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import parsers, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
 from stores.models import AgrovetStore
 
 from .csv_import import parse_products_csv
 from .models import Product
-from .serializers import ProductSerializer
+from .serializers import ProductSerializer, PublicProductSerializer
+
+
+class MarketplacePagination(PageNumberPagination):
+    page_size = 20
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -104,3 +109,34 @@ class ProductViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class MarketplaceProductViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Public cross-store catalog for the customer app.
+
+    No auth. Only active products from open stores. Distinct from the
+    vendor-scoped ProductViewSet at /api/v1/products/.
+    """
+
+    serializer_class = PublicProductSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = MarketplacePagination
+    http_method_names = ["get", "head", "options"]
+
+    def get_queryset(self):
+        qs = (
+            Product.objects.filter(active=True, store__open=True)
+            .select_related("store")
+            .order_by("name", "id")
+        )
+
+        category = self.request.query_params.get("category")
+        if category:
+            qs = qs.filter(category=category)
+
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(name__icontains=search)
+
+        return qs

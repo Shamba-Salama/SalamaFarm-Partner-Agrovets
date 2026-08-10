@@ -4,7 +4,9 @@ from .base import *  # noqa: F403
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+# 10.0.2.2 is the Android emulator's alias for the host machine (see the Flutter
+# app's ApiConfig); without it the emulator's requests 400 with DisallowedHost.
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "10.0.2.2"]
 
 # Vite default (5173). TanStack Start / Lovable often also serve on 3000.
 CORS_ALLOWED_ORIGINS = [
