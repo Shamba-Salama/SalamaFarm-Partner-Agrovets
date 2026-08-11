@@ -258,6 +258,209 @@ class CustomerOrderPatchSerializer(serializers.ModelSerializer):
         fields = ("status", "pickup", "order_type", "channel")
 
 
+# --------------------------------------------------------------------------- #
+# Customer-app (marketplace) order creation
+#
+# Distinct from the vendor CustomerOrderCreateSerializer above:
+#   - the buyer is a global customers.CustomerAccount (request.user), not a
+#     store owner; there is no client-supplied customer {name, phone}.
+#   - the store is *resolved from the products*, not from the authenticated
+#     user, and an order may span only one store.
+#   - the amount is computed server-side from live Product prices — the client
+#     never sends (and cannot influence) the charged amount.
+# --------------------------------------------------------------------------- #
+
+
+class MarketplaceOrderItemSerializer(serializers.Serializer):
+    product_id = serializers.IntegerField()
+    qty = serializers.IntegerField(min_value=1)
+
+
+class MarketplaceOrderReadSerializer(serializers.ModelSerializer):
+    """Created/poll payload — id, amount, paid_at, mpesa_code, payment_status."""
+
+    items = OrderItemReadSerializer(many=True, read_only=True)
+    store_id = serializers.IntegerField(read_only=True)
+    store_name = serializers.CharField(source="store.name", read_only=True)
+    customer = CustomerNestedSerializer(read_only=True)
+    payment_status = serializers.SerializerMethodField()
+    payment_reference = serializers.SerializerMethodField()
+    payment_result_desc = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomerOrder
+        fields = (
+            "id",
+            "store_id",
+            "store_name",
+            "customer",
+            "amount",
+            "status",
+            "order_type",
+            "pickup",
+            "channel",
+            "paid_at",
+            "mpesa_code",
+            "payment_status",
+            "payment_reference",
+            "payment_result_desc",
+            "items",
+            "created_at",
+        )
+        read_only_fields = fields
+
+    def _latest_charge(self, obj):
+        from payments.models import MpesaTransaction
+
+        # Prefer reverse relation if already prefetched.
+        cache = getattr(obj, "_prefetched_objects_cache", {})
+        if "mpesa_transactions" in cache:
+            txns = [
+                t
+                for t in obj.mpesa_transactions.all()
+                if t.kind == MpesaTransaction.Kind.CHARGE
+            ]
+            txns.sort(key=lambda t: t.id, reverse=True)
+            return txns[0] if txns else None
+
+        return (
+            MpesaTransaction.objects.filter(
+                order=obj, kind=MpesaTransaction.Kind.CHARGE
+            )
+            .order_by("-id")
+            .first()
+        )
+
+    def get_payment_status(self, obj) -> str:
+        """Client poll key — never invent success without paid_at."""
+        if obj.paid_at is not None:
+            return "success"
+        txn = self._latest_charge(obj)
+        if txn is None:
+            return "unpaid"
+        if txn.status == txn.Status.FAILED:
+            return "failed"
+        if txn.status == txn.Status.ABANDONED:
+            return "abandoned"
+        if txn.status == txn.Status.PENDING:
+            return "pending"
+        if txn.status == txn.Status.SUCCESS:
+            # Webhook may still be writing paid_at; treat as pending until paid_at.
+            return "pending"
+        return "unpaid"
+
+    def get_payment_reference(self, obj):
+        txn = self._latest_charge(obj)
+        return txn.reference if txn else None
+
+    def get_payment_result_desc(self, obj):
+        txn = self._latest_charge(obj)
+        return (txn.result_desc or "") if txn else ""
+
+
+class MarketplaceOrderCreateSerializer(serializers.Serializer):
+    items = MarketplaceOrderItemSerializer(many=True, allow_empty=False)
+    order_type = serializers.ChoiceField(
+        choices=CustomerOrder.OrderType.choices,
+        default=CustomerOrder.OrderType.COUNTER_PICKUP,
+        required=False,
+    )
+
+    def validate_items(self, items):
+        """Resolve every product, enforce a single store, and stash the
+        products + store for create(). Only active products from open stores
+        are purchasable (mirrors the marketplace/products visibility rules)."""
+        product_ids = [i["product_id"] for i in items]
+        products = {
+            p.id: p
+            for p in Product.objects.filter(
+                id__in=product_ids, active=True, store__open=True
+            ).select_related("store")
+        }
+        missing = sorted(set(product_ids) - set(products))
+        if missing:
+            raise serializers.ValidationError(
+                f"Unknown or unavailable product_id(s): {missing}."
+            )
+
+        store_ids = {p.store_id for p in products.values()}
+        if len(store_ids) > 1:
+            raise serializers.ValidationError(
+                "All items must belong to a single store; got products from "
+                f"{len(store_ids)} stores (ids {sorted(store_ids)})."
+            )
+
+        self.context["products_by_id"] = products
+        self.context["store"] = next(iter(products.values())).store
+        return items
+
+    def _resolve_customer(self, store, account) -> Customer:
+        """Match this store's crm.Customer for the account: by link first, then
+        by phone (adopting an existing vendor-created row), else create fresh."""
+        # 1. Already linked to this account in this store.
+        customer = Customer.objects.filter(store=store, account=account).first()
+        if customer is not None:
+            return customer
+
+        # 2. A phone-matched row exists (e.g. the vendor added this buyer
+        #    manually before they ever used the app) — adopt it.
+        customer = Customer.objects.filter(store=store, phone=account.phone).first()
+        if customer is not None:
+            if customer.account_id is None:
+                customer.account = account
+                customer.save(update_fields=["account", "updated_at"])
+            return customer
+
+        # 3. First contact with this store — seed from the global account.
+        return Customer.objects.create(
+            store=store,
+            account=account,
+            phone=account.phone,
+            name=(account.full_name or "").strip() or "Customer",
+        )
+
+    @transaction.atomic
+    def create(self, validated_data):
+        account = self.context["account"]
+        store = self.context["store"]
+        products_by_id = self.context["products_by_id"]
+        items_data = validated_data["items"]
+
+        customer = self._resolve_customer(store, account)
+
+        # Server-authoritative amount: live Product.price × qty, summed.
+        amount = sum(
+            (
+                products_by_id[row["product_id"]].price * row["qty"]
+                for row in items_data
+            ),
+            Decimal("0"),
+        )
+
+        order = CustomerOrder.objects.create(
+            store=store,
+            customer=customer,
+            channel=CustomerOrder.Channel.IN_APP,
+            order_type=validated_data["order_type"],
+            pickup=CustomerOrder.Pickup.AWAITING_PICKUP,
+            status=CustomerOrder.Status.PENDING,
+            amount=amount,
+            paid_at=None,
+        )
+        OrderItem.objects.bulk_create(
+            [
+                OrderItem(
+                    order=order,
+                    product=products_by_id[row["product_id"]],
+                    qty=row["qty"],
+                    price=products_by_id[row["product_id"]].price,
+                )
+                for row in items_data
+            ]
+        )
+        return order
+
+
 def _display_product(order: CustomerOrder) -> str:
     items = list(order.items.all())
     if not items:

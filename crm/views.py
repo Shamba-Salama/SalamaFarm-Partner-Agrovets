@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 
 from catalog.models import Product
 from core.tenancy import get_vendor_store
+from customers.authentication import CustomerJWTAuthentication
+from customers.permissions import IsAuthenticatedCustomer
 
 from .models import Customer, CustomerOrder, OrderItem
 from .serializers import (
@@ -20,6 +22,8 @@ from .serializers import (
     CustomerOrderPatchSerializer,
     CustomerOrderSerializer,
     CustomerSerializer,
+    MarketplaceOrderCreateSerializer,
+    MarketplaceOrderReadSerializer,
 )
 
 
@@ -150,6 +154,53 @@ class CustomerOrderViewSet(
             .get(pk=order.pk)
         )
         return Response(CustomerOrderSerializer(order, context={"request": request}).data)
+
+
+class MarketplaceOrderViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Customer-app orders (POST create + GET detail for payment polling).
+
+    Authenticated as a global CustomerAccount (not a vendor). The store is
+    resolved from the ordered products — an order belongs to exactly one store —
+    and the charged amount is computed server-side from live Product prices;
+    the client never sends an amount. Structurally separate from the
+    vendor-scoped CustomerOrderViewSet above, mirroring marketplace/products.
+    """
+
+    authentication_classes = [CustomerJWTAuthentication]
+    permission_classes = [IsAuthenticatedCustomer]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        return (
+            CustomerOrder.objects.filter(customer__account=self.request.user)
+            .select_related("store", "customer")
+            .prefetch_related("items__product", "mpesa_transactions")
+            .order_by("-id")
+        )
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return MarketplaceOrderCreateSerializer
+        return MarketplaceOrderReadSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["account"] = self.request.user
+        return ctx
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+        order = self.get_queryset().get(pk=order.pk)
+        return Response(
+            MarketplaceOrderReadSerializer(order, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class WeeklySalesView(APIView):
