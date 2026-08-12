@@ -77,6 +77,8 @@ const emptyDraft = (): ProductWriteBody => ({
   expiry: null,
   image: "🧺",
   active: true,
+  imageFile: null,
+  existingImageUrl: null,
 });
 
 type DrawerState =
@@ -93,6 +95,8 @@ function productToDraft(p: Product): ProductWriteBody {
     expiry: p.expiry,
     image: p.image,
     active: p.active,
+    imageFile: null,
+    existingImageUrl: p.imageUrl ?? null,
   };
 }
 
@@ -260,8 +264,16 @@ function InventoryPage() {
                     return (
                       <TableRow key={p.id} className={cn(!p.active && "opacity-55")}>
                         <TableCell>
-                          <span className="grid h-10 w-10 place-items-center rounded-lg bg-muted text-lg">
-                            {p.image}
+                          <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-lg bg-muted text-lg">
+                            {p.imageUrl ? (
+                              <img
+                                src={p.imageUrl}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              p.image
+                            )}
                           </span>
                         </TableCell>
                         <TableCell className="min-w-[180px] font-medium">{p.name}</TableCell>
@@ -360,10 +372,41 @@ function ProductDrawer({
   onSave: (draft: ProductWriteBody) => void;
 }) {
   const [draft, setDraft] = useState<ProductWriteBody | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(state?.draft ?? null);
   }, [state]);
+
+  useEffect(() => {
+    if (!draft?.imageFile) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(draft.imageFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [draft?.imageFile]);
+
+  const shownImage = previewUrl || draft?.existingImageUrl || null;
+
+  const onPickImage = (file: File | null) => {
+    if (!draft) return;
+    if (!file) {
+      setDraft({ ...draft, imageFile: null });
+      return;
+    }
+    const okType = ["image/jpeg", "image/jpg", "image/png"].includes(file.type);
+    if (!okType) {
+      toast.error("Please choose a JPG or PNG image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be 5 MB or smaller.");
+      return;
+    }
+    setDraft({ ...draft, imageFile: file });
+  };
 
   return (
     <Sheet open={!!state} onOpenChange={(o) => !o && onClose()}>
@@ -443,18 +486,52 @@ function ProductDrawer({
               </div>
               <div className="space-y-1.5">
                 <Label>Product image</Label>
-                <div className="rounded-xl border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-3 opacity-60">
-                    <ImagePlus className="h-5 w-5 shrink-0" />
-                    <span className="min-w-0 truncate">Upload product photo (JPG / PNG)</span>
-                  </div>
-                  <input type="file" accept="image/*" className="hidden" disabled />
-                  <p className="mt-2 text-xs">
-                    <strong className="text-foreground">Known gap:</strong> product image upload is
-                    not wired yet (no multipart create/update, and media isn't served in dev). Emoji
-                    stays the product visual for now.
+                <label className="flex cursor-pointer flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-sm transition-colors hover:bg-muted">
+                  {shownImage ? (
+                    <img
+                      src={shownImage}
+                      alt="Product preview"
+                      className="mx-auto h-32 w-full max-w-xs rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                      <ImagePlus className="h-5 w-5 shrink-0" />
+                      <span className="min-w-0">Upload product photo (JPG / PNG)</span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/jpg,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {draft.imageFile
+                      ? `Selected: ${draft.imageFile.name}`
+                      : shownImage
+                        ? "Tap to replace with a new JPG or PNG (max 5 MB)."
+                        : "Optional. Farmers see this photo in the mobile marketplace."}
                   </p>
-                </div>
+                </label>
+                {(draft.imageFile || draft.existingImageUrl) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-fit px-0 text-muted-foreground"
+                    onClick={() =>
+                      setDraft({
+                        ...draft,
+                        imageFile: null,
+                        // Keep existing server image unless a new file was chosen;
+                        // clearing only removes the pending local file selection.
+                      })
+                    }
+                    disabled={!draft.imageFile}
+                  >
+                    {draft.imageFile ? "Clear selected photo" : null}
+                  </Button>
+                )}
               </div>
             </div>
 

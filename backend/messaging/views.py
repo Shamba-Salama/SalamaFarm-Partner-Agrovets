@@ -27,8 +27,9 @@ class ThreadViewSet(
     """
     Threads for the authenticated vendor's store.
 
-    Store-sent messages never bump `unread`. Farmer-sent increments are not
-    exposed yet (no farmer-facing API). Cross-tenant ids → 404.
+    Store-sent messages never bump `unread`. Farmer-sent messages bump
+    `unread` via the customer marketplace API (/api/v1/marketplace/threads/).
+    Cross-tenant ids → 404.
     """
 
     permission_classes = [permissions.IsAuthenticated]
