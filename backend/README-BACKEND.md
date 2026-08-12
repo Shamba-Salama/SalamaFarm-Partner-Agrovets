@@ -113,8 +113,15 @@ Kinds: `charge` / `transfer`. Finalization is via `POST /api/paystack/webhook/` 
 | Method | Path | Auth |
 |--------|------|------|
 | POST | `/api/v1/store/create-subaccount/` | JWT — creates Paystack subaccount or returns existing code |
-| POST | `/api/v1/payments/charge/` | JWT — body `{order_id, phone}`; M-Pesa STK via Charge API |
+| POST | `/api/v1/payments/charge/` | JWT (vendor) — body `{order_id, phone}`; M-Pesa STK via Charge API |
+| POST | `/api/v1/payments/customer-charge/` | Customer JWT — same STK path; order must belong to the signed-in account |
+| GET | `/api/v1/marketplace/orders/{id}/` | Customer JWT — poll `paid_at` / `payment_status` / `mpesa_code` |
 | POST | `/api/paystack/webhook/` | Public — HMAC-SHA512 via `X-Paystack-Signature`; `charge.success` / `charge.failed` |
+
+**Test mode tip:** Paystack Kenya sandbox M-Pesa number is `+254710000000` (not a real SIM).
+Real numbers are declined with *Please use the test mobile money number…*. Sandbox often
+returns `status=success` synchronously; the charge helper then sets `paid_at` immediately
+(webhook still applies the same transition idempotently in staging/prod).
 
 On `charge.success`: mark `MpesaTransaction` success, set `CustomerOrder.paid_at`, copy
 receipt/reference onto `CustomerOrder.mpesa_code`, and if `pickup` was `Unmatched` move it
