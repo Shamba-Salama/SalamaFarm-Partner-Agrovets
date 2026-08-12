@@ -10,6 +10,7 @@ from rest_framework import serializers
 
 from catalog.models import Product
 
+from .customer_resolution import resolve_marketplace_customer
 from .models import Customer, CustomerOrder, OrderItem
 
 
@@ -395,29 +396,7 @@ class MarketplaceOrderCreateSerializer(serializers.Serializer):
         return items
 
     def _resolve_customer(self, store, account) -> Customer:
-        """Match this store's crm.Customer for the account: by link first, then
-        by phone (adopting an existing vendor-created row), else create fresh."""
-        # 1. Already linked to this account in this store.
-        customer = Customer.objects.filter(store=store, account=account).first()
-        if customer is not None:
-            return customer
-
-        # 2. A phone-matched row exists (e.g. the vendor added this buyer
-        #    manually before they ever used the app) — adopt it.
-        customer = Customer.objects.filter(store=store, phone=account.phone).first()
-        if customer is not None:
-            if customer.account_id is None:
-                customer.account = account
-                customer.save(update_fields=["account", "updated_at"])
-            return customer
-
-        # 3. First contact with this store — seed from the global account.
-        return Customer.objects.create(
-            store=store,
-            account=account,
-            phone=account.phone,
-            name=(account.full_name or "").strip() or "Customer",
-        )
+        return resolve_marketplace_customer(store, account)
 
     @transaction.atomic
     def create(self, validated_data):

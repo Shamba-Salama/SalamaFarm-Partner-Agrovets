@@ -28,6 +28,11 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     serializer_class = ProductSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [
+        parsers.JSONParser,
+        parsers.MultiPartParser,
+        parsers.FormParser,
+    ]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_store(self) -> AgrovetStore:
