@@ -122,6 +122,10 @@ export function CsvImportDialog({
           <DialogDescription>
             Bulk-load your whole shelf in one upload. Use the template so the columns match. Preview
             is client-side; the server validates and imports all rows or nothing.
+            <span className="mt-2 block text-muted-foreground">
+              Photos are not included in CSV/Excel — after import, open each product and upload a
+              JPG/PNG. Spreadsheets cannot reliably carry image files across machines.
+            </span>
           </DialogDescription>
         </DialogHeader>
 

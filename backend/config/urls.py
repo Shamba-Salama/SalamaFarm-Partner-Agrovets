@@ -1,5 +1,7 @@
 """URL configuration for the SalamaFarm Partner Agrovets API."""
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
@@ -12,7 +14,11 @@ urlpatterns = [
     path("api/v1/store/", include("stores.urls")),
     path("api/v1/", include("catalog.urls")),
     path("api/v1/", include("crm.urls")),
+    path("api/v1/marketplace/", include("messaging.marketplace_urls")),
     path("api/v1/", include("messaging.urls")),
     path("api/v1/", include("payments.urls")),
     path("api/", include(webhook_urlpatterns)),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
