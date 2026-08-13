@@ -37,7 +37,12 @@ import {
   upsertCustomer,
   type PortalCustomer,
 } from "@/lib/crm-api";
-import { fetchWeeklySales, type WeeklySalesRow } from "@/lib/analytics-api";
+import {
+  fetchAppVisits,
+  fetchWeeklySales,
+  type AppVisitsStats,
+  type WeeklySalesRow,
+} from "@/lib/analytics-api";
 import { chargeOrder, createSubaccount, type ChargeResponse } from "@/lib/payments-api";
 import {
   apiMessageToMessage,
@@ -262,6 +267,11 @@ type Ctx = {
   weeklySalesLoading: boolean;
   refreshWeeklySales: () => Promise<WeeklySalesRow[]>;
   resetWeeklySales: () => void;
+  appVisits: AppVisitsStats | null;
+  appVisitsReady: boolean;
+  appVisitsLoading: boolean;
+  refreshAppVisits: () => Promise<AppVisitsStats>;
+  resetAppVisits: () => void;
   setOrderStatus: (id: string, status: FollowUpStatus) => Promise<CustomerOrder>;
   setPickup: (id: string, pickup: CustomerOrder["pickup"]) => Promise<CustomerOrder>;
   upsertCustomerEntry: (input: { name: string; phone: string }) => Promise<PortalCustomer>;
@@ -308,6 +318,9 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [weeklySales, setWeeklySales] = useState<WeeklySalesRow[]>([]);
   const [weeklySalesReady, setWeeklySalesReady] = useState(false);
   const [weeklySalesLoading, setWeeklySalesLoading] = useState(false);
+  const [appVisits, setAppVisits] = useState<AppVisitsStats | null>(null);
+  const [appVisitsReady, setAppVisitsReady] = useState(false);
+  const [appVisitsLoading, setAppVisitsLoading] = useState(false);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadsReady, setThreadsReady] = useState(false);
   const [threadsLoading, setThreadsLoading] = useState(false);
@@ -317,6 +330,8 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const chargingOrderIds = useRef(new Set<string>());
   const threadsRef = useRef<Thread[]>([]);
   threadsRef.current = threads;
+  const openThreadIdRef = useRef<string | null>(null);
+  openThreadIdRef.current = openThreadId;
 
   const mapProduct = useCallback((raw: ReturnType<typeof apiProductToProduct>): Product => {
     const category = CATEGORIES.includes(raw.category as Category)
@@ -717,6 +732,24 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const resetAppVisits = useCallback(() => {
+    setAppVisits(null);
+    setAppVisitsReady(false);
+    setAppVisitsLoading(false);
+  }, []);
+
+  const refreshAppVisits = useCallback(async () => {
+    setAppVisitsLoading(true);
+    try {
+      const stats = await fetchAppVisits();
+      setAppVisits(stats);
+      setAppVisitsReady(true);
+      return stats;
+    } finally {
+      setAppVisitsLoading(false);
+    }
+  }, []);
+
   const resetThreads = useCallback(() => {
     setThreads([]);
     setThreadsReady(false);
@@ -914,7 +947,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     null,
   );
 
-  // Poll for farmer-side updates (no farmer API yet — normally idle until admin seeds unread).
+  // Poll for new farmer messages — faster while a chat drawer is open.
   useEffect(() => {
     if (!threadsReady) return;
 
@@ -925,6 +958,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         const list = (await fetchThreads()).map((row) => mapThread(apiThreadToThread(row)));
         const prev = threadsRef.current;
         const prevById = new Map(prev.map((t) => [t.id, t]));
+        const openId = openThreadIdRef.current;
 
         for (const next of list) {
           const old = prevById.get(next.id);
@@ -938,18 +972,39 @@ export function PortalProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        setThreads((current) => mergeThreadList(list, current));
+        let merged = mergeThreadList(list, prev);
+
+        if (openId) {
+          try {
+            const detail = mapThread(apiThreadToThread(await fetchThreadDetail(openId)));
+            merged = merged.map((t) =>
+              t.id === openId
+                ? {
+                    ...detail,
+                    unread: 0,
+                    messagesLoaded: true,
+                  }
+                : t,
+            );
+          } catch (err) {
+            console.warn("Open thread refresh failed", err);
+          }
+        }
+
+        setThreads(merged);
       } catch (err) {
         console.warn("Thread poll failed", err);
       }
     };
 
+    void poll();
+    const intervalMs = openThreadId ? 3000 : 8000;
     const timer = window.setInterval(() => {
       void poll();
-    }, 50000);
+    }, intervalMs);
 
     return () => window.clearInterval(timer);
-  }, [threadsReady, mapThread, mergeThreadList]);
+  }, [threadsReady, mapThread, mergeThreadList, openThreadId]);
 
   useEffect(() => {
     if (!incoming) return;
@@ -1000,6 +1055,11 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       weeklySalesLoading,
       refreshWeeklySales,
       resetWeeklySales,
+      appVisits,
+      appVisitsReady,
+      appVisitsLoading,
+      refreshAppVisits,
+      resetAppVisits,
       setOrderStatus,
       setPickup,
       upsertCustomerEntry,
@@ -1058,6 +1118,11 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       weeklySalesLoading,
       refreshWeeklySales,
       resetWeeklySales,
+      appVisits,
+      appVisitsReady,
+      appVisitsLoading,
+      refreshAppVisits,
+      resetAppVisits,
       setOrderStatus,
       setPickup,
       upsertCustomerEntry,

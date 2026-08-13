@@ -73,6 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetCustomers,
     refreshWeeklySales,
     resetWeeklySales,
+    refreshAppVisits,
+    resetAppVisits,
     refreshThreads,
     resetThreads,
   } = usePortal();
@@ -121,6 +123,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshWeeklySales]);
 
+  const loadAppVisits = useCallback(async () => {
+    try {
+      await refreshAppVisits();
+    } catch (err) {
+      console.warn("Failed to load app visits", err);
+    }
+  }, [refreshAppVisits]);
+
   const loadThreads = useCallback(async () => {
     try {
       await refreshThreads();
@@ -137,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetOrders();
     resetCustomers();
     resetWeeklySales();
+    resetAppVisits();
     resetThreads();
     void navigate({ to: "/login" });
   }, [
@@ -146,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetOrders,
     resetCustomers,
     resetWeeklySales,
+    resetAppVisits,
     resetThreads,
   ]);
 
@@ -178,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadOrders();
     await loadCustomers();
     await loadWeeklySales();
+    await loadAppVisits();
     await loadThreads();
     return me;
   }, [
@@ -187,6 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadOrders,
     loadCustomers,
     loadWeeklySales,
+    loadAppVisits,
     loadThreads,
   ]);
 
@@ -222,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadOrders();
       await loadCustomers();
       await loadWeeklySales();
+      await loadAppVisits();
       await loadThreads();
       return me;
     },
@@ -232,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadOrders,
       loadCustomers,
       loadWeeklySales,
+      loadAppVisits,
       loadThreads,
     ],
   );
@@ -283,6 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetOrders();
       resetCustomers();
       resetWeeklySales();
+      resetAppVisits();
       resetThreads();
       void navigate({ to: "/login" });
     });
@@ -294,6 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetOrders,
     resetCustomers,
     resetWeeklySales,
+    resetAppVisits,
     resetThreads,
   ]);
 
@@ -315,6 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           resetOrders();
           resetCustomers();
           resetWeeklySales();
+          resetAppVisits();
           resetThreads();
           if (!(err instanceof ApiError && err.status === 401)) {
             console.warn("Failed to restore session", err);
@@ -334,6 +353,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetOrders,
     resetCustomers,
     resetWeeklySales,
+    resetAppVisits,
     resetThreads,
   ]);
 
