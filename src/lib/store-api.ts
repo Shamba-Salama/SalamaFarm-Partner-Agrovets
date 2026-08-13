@@ -8,6 +8,8 @@ export type ApiStore = {
   county: string;
   till: string;
   attendant_phone: string;
+  latitude?: number | null;
+  longitude?: number | null;
   paystack_subaccount_code?: string;
   open: boolean;
   onboarded: boolean;
@@ -22,6 +24,9 @@ export type StoreProfile = {
   county: string;
   till: string;
   attendantPhone: string;
+  /** Optional map pin for customer Get Directions / arrival. */
+  latitude: number | null;
+  longitude: number | null;
   /** Server-managed Paystack subaccount; never PATCH from the client. */
   paystackSubaccountCode: string;
   open: boolean;
@@ -34,6 +39,8 @@ export const emptyStoreProfile = (): StoreProfile => ({
   county: "",
   till: "",
   attendantPhone: "",
+  latitude: null,
+  longitude: null,
   paystackSubaccountCode: "",
   open: true,
   onboarded: false,
@@ -46,6 +53,8 @@ export function apiStoreToProfile(store: ApiStore): StoreProfile {
     county: store.county ?? "",
     till: store.till ?? "",
     attendantPhone: store.attendant_phone ?? "",
+    latitude: store.latitude ?? null,
+    longitude: store.longitude ?? null,
     paystackSubaccountCode: store.paystack_subaccount_code ?? "",
     open: Boolean(store.open),
     onboarded: Boolean(store.onboarded),
@@ -59,6 +68,8 @@ export function profilePatchToBody(patch: Partial<StoreProfile>): Record<string,
   if (patch.county !== undefined) body.county = patch.county;
   if (patch.till !== undefined) body.till = patch.till;
   if (patch.attendantPhone !== undefined) body.attendant_phone = patch.attendantPhone;
+  if (patch.latitude !== undefined) body.latitude = patch.latitude;
+  if (patch.longitude !== undefined) body.longitude = patch.longitude;
   if (patch.open !== undefined) body.open = patch.open;
   if (patch.onboarded !== undefined) body.onboarded = patch.onboarded;
   return body;

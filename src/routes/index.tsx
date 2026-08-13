@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, MessagesSquare, Package, Receipt, TrendingUp, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  MapPin,
+  MessagesSquare,
+  Package,
+  Receipt,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -51,11 +59,22 @@ function DashboardPage() {
     weeklySales,
     weeklySalesLoading,
     weeklySalesReady,
+    appVisits,
+    appVisitsLoading,
+    appVisitsReady,
   } = usePortal();
 
   const revenue = orders.reduce((s, o) => s + o.amount, 0);
   const pending = orders.filter((o) => o.status === "Pending").length;
   const alerts = products.filter((p) => stockStatus(p) !== "In Stock");
+  const appVisitsHeadline = appVisitsReady
+    ? String(appVisits?.arrivedThisWeek ?? 0)
+    : appVisitsLoading
+      ? "…"
+      : "—";
+  const appVisitsNote = appVisitsReady
+    ? `${appVisits?.arrivedCount ?? 0} arrived total · ${appVisits?.startedCount ?? 0} in progress`
+    : "Customer Get Directions arrivals";
 
   const chartRows = prepareWeeklySalesChartRows(weeklySales);
   const weekCount = chartRows.length;
@@ -75,7 +94,7 @@ function DashboardPage() {
 
   return (
     <PortalLayout title="Dashboard Overview" subtitle={subtitle}>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Metric
           icon={TrendingUp}
           label="Total revenue"
@@ -100,6 +119,7 @@ function DashboardPage() {
           value={String(pending)}
           note="Customers awaiting a check-in"
         />
+        <Metric icon={MapPin} label="App Visits" value={appVisitsHeadline} note={appVisitsNote} />
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">

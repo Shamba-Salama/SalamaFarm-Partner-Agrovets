@@ -46,6 +46,35 @@ export async function fetchWeeklySales(): Promise<WeeklySalesRow[]> {
   return unwrapList<ApiWeeklySalesRow>(data).map(apiWeeklySalesRowToRow);
 }
 
+/** Raw payload from GET /analytics/app-visits/. */
+export type ApiAppVisits = {
+  started_count: number;
+  arrived_count: number;
+  arrived_today: number;
+  arrived_this_week: number;
+};
+
+export type AppVisitsStats = {
+  startedCount: number;
+  arrivedCount: number;
+  arrivedToday: number;
+  arrivedThisWeek: number;
+};
+
+export function apiAppVisitsToStats(raw: ApiAppVisits): AppVisitsStats {
+  return {
+    startedCount: Number(raw.started_count) || 0,
+    arrivedCount: Number(raw.arrived_count) || 0,
+    arrivedToday: Number(raw.arrived_today) || 0,
+    arrivedThisWeek: Number(raw.arrived_this_week) || 0,
+  };
+}
+
+export async function fetchAppVisits(): Promise<AppVisitsStats> {
+  const data = await api.get<ApiAppVisits>("/analytics/app-visits/");
+  return apiAppVisitsToStats(data);
+}
+
 /**
  * Prepare rows for Recharts: keep API sort, cap at 8 most recent weeks,
  * rebuild axis labels (include year only when the visible window spans years).
