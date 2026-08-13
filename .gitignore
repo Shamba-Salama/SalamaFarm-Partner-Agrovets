@@ -43,3 +43,15 @@ backend/**/*.py[cod]
 *.njsproj
 *.sln
 *.sw?
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+infra/aws-ec2/terraform.tfvars

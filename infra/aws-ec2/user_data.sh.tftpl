@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+apt-get install -y ca-certificates curl gnupg lsb-release awscli
+
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+systemctl enable --now docker
+
+mkdir -p /opt/salamafarm
+
+cat > /opt/salamafarm/.env <<'ENVEOF'
+POSTGRES_PASSWORD=${postgres_password}
+SECRET_KEY=${django_secret_key}
+PAYSTACK_SECRET_KEY=${paystack_secret_key}
+PAYSTACK_PUBLIC_KEY=${paystack_public_key}
+AFRICASTALKING_USERNAME=${africastalking_username}
+AFRICASTALKING_API_KEY=${africastalking_api_key}
+AFRICASTALKING_SENDER_ID=${africastalking_sender_id}
+ENVEOF
+
+cat > /opt/salamafarm/docker-compose.prod.yml <<'COMPOSEEOF'
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: salamafarm
+      POSTGRES_USER: salamafarm_app
+      POSTGRES_PASSWORD: $${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salamafarm_app -d salamafarm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: ${backend_image}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=$${SECRET_KEY}
+      - DATABASE_URL=postgres://salamafarm_app:$${POSTGRES_PASSWORD}@db:5432/salamafarm
+      - ALLOWED_HOSTS=*
+      - CORS_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
+      - PAYSTACK_SECRET_KEY=$${PAYSTACK_SECRET_KEY}
+      - PAYSTACK_PUBLIC_KEY=$${PAYSTACK_PUBLIC_KEY}
+      - AFRICASTALKING_USERNAME=$${AFRICASTALKING_USERNAME}
+      - AFRICASTALKING_API_KEY=$${AFRICASTALKING_API_KEY}
+      - AFRICASTALKING_SENDER_ID=$${AFRICASTALKING_SENDER_ID}
+    volumes:
+      - backend_media:/app/media
+      - backend_static:/app/staticfiles
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: ${frontend_image}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  backend_media:
+  backend_static:
+COMPOSEEOF
+
+aws ecr get-login-password --region ${aws_region} | docker login --username AWS --password-stdin ${ecr_registry}
+docker compose -f /opt/salamafarm/docker-compose.prod.yml pull
+docker compose -f /opt/salamafarm/docker-compose.prod.yml up -d

@@ -1,0 +1,15 @@
+aws_region         = "eu-west-1"
+app_name           = "salamafarm"
+github_repository  = "Shamba-Salama/SalamaFarm-Partner-Agrovets"
+instance_type      = "t3.small"
+key_name           = ""
+ssh_allowed_cidr   = ""
+
+postgres_password  = "replace-with-strong-password"
+django_secret_key  = "replace-with-long-random-secret"
+
+paystack_secret_key      = ""
+paystack_public_key      = ""
+africastalking_username  = "sandbox"
+africastalking_api_key   = ""
+africastalking_sender_id = ""
