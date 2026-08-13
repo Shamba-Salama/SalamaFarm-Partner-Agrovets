@@ -1,0 +1,44 @@
+# Backend .dockerignore
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Development database and media
+db.sqlite3
+media/
+
+# Static files (will be collected during build)
+staticfiles/
+
+# Environment files
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Documentation
+README*.md
