@@ -29,8 +29,8 @@ FROM nginx:alpine
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy built assets from build stage
-COPY --from=build /app/dist /usr/share/nginx/html
+# TanStack Start/Nitro emits static assets to .output/public
+COPY --from=build /app/.output/public /usr/share/nginx/html
 
 # Create non-root user for nginx
 RUN addgroup -g 101 -S nginx && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
