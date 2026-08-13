@@ -12,7 +12,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production --no-audit
+RUN npm ci --no-audit
 
 # Copy source code
 COPY . .
