@@ -8,8 +8,38 @@ Vendor portal for registered SalamaFarm agrovet partners: store onboarding, inve
 - **Frontend** — React + TanStack Start / Vite under the repo root
 - **Payments** — Paystack Kenya (subaccounts, M-Pesa charge, webhooks)
 
-## Prerequisites
+## Quick Start with Docker (Recommended)
 
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+
+```bash
+# Clone and setup
+git clone <repository-url>
+cd SalamaFarm-Partner-Agrovets
+
+# Copy and configure environment
+cp .env.docker.example .env
+# Edit .env with your SECRET_KEY, POSTGRES_PASSWORD, and Paystack keys
+
+# Build and run all services
+docker-compose up --build
+
+# Access the application
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8000
+# PostgreSQL: localhost:5432
+```
+
+**Development mode** (with hot-reload):
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build
+# Frontend dev server: http://localhost:5173
+# Backend with runserver: http://localhost:8000
+```
+
+## Manual Setup (Alternative)
+
+**Prerequisites:**
 - **Node.js** 20+ and **npm** (frontend)
 - **Python 3.12** for the backend (prefer `/usr/local/bin/python3.12` on macOS Homebrew; do not use an older system Python)
 - Django targets **5.2 LTS** (`Django>=5.2,<5.3`)
