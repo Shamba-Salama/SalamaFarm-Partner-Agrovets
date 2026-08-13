@@ -32,9 +32,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # TanStack Start/Nitro emits static assets to .output/public
 COPY --from=build /app/.output/public /usr/share/nginx/html
 
-# Create non-root user for nginx
-RUN addgroup -g 101 -S nginx && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
-
 EXPOSE 80
 
 # Use nginx with daemon off
