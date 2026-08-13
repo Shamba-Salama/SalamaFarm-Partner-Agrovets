@@ -19,6 +19,7 @@ dist-ssr
 # Frontend env (keep .env.example)
 .env
 .env.*.local
+.env.example
 
 # Wrangler / Cloudflare
 .wrangler/

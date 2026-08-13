@@ -1,4 +1,17 @@
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./auth-storage";
+import { demoApiRequest, isSupabaseTemporaryBackendEnabled } from "./supabase-demo";
+import {
+  supabaseRegister,
+  supabaseLogin,
+  supabaseGetMe,
+  supabaseGetStore,
+  supabasePatchStore,
+  supabaseGetProducts,
+  supabaseCreateProduct,
+  supabaseGetOrders,
+  supabaseGetThreads,
+  supabaseLogout,
+} from "./supabase-adapter";
 
 const DEFAULT_BASE = "http://127.0.0.1:8000/api/v1";
 
@@ -81,6 +94,63 @@ async function tryRefreshAccessToken(): Promise<boolean> {
 }
 
 export async function apiRequest<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  if (isSupabaseTemporaryBackendEnabled()) {
+    try {
+      // Route to real Supabase adapter for key endpoints
+      const method = (options.method ?? "GET").toUpperCase();
+      const body = options.body;
+
+      // Auth endpoints
+      if (path === "/auth/register/" && method === "POST") {
+        return (await supabaseRegister(body as any)) as T;
+      }
+      if (path === "/auth/token/" && method === "POST") {
+        const payload = typeof body === "string" ? JSON.parse(body) : body;
+        return (await supabaseLogin(payload.email, payload.password)) as T;
+      }
+      if (path === "/auth/me/" && method === "GET") {
+        return (await supabaseGetMe()) as T;
+      }
+      if (path === "/auth/logout/" && method === "POST") {
+        await supabaseLogout();
+        return { ok: true } as T;
+      }
+
+      // Store endpoints
+      if (path === "/store/" && method === "GET") {
+        return (await supabaseGetStore()) as T;
+      }
+      if (path === "/store/" && method === "PATCH") {
+        return (await supabasePatchStore(body as any)) as T;
+      }
+
+      // Products endpoints
+      if (path === "/products/" && method === "GET") {
+        return (await supabaseGetProducts()) as T;
+      }
+      if (path === "/products/" && method === "POST") {
+        const payload = typeof body === "string" ? JSON.parse(body) : body;
+        return (await supabaseCreateProduct(payload)) as T;
+      }
+
+      // Orders endpoints
+      if (path === "/orders/" && method === "GET") {
+        return (await supabaseGetOrders()) as T;
+      }
+
+      // Threads endpoints
+      if (path === "/threads/" && method === "GET") {
+        return (await supabaseGetThreads()) as T;
+      }
+
+      // Fall back to demo backend for other endpoints
+      return (await demoApiRequest(path, options)) as T;
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError("Backend request failed.", 500, error);
+    }
+  }
+
   const { method = "GET", body, auth = true, headers = {}, skipRefresh = false } = options;
   const url = path.startsWith("http") ? path : `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 
