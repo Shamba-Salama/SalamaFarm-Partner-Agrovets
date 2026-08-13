@@ -1,0 +1,18 @@
+# Dockerfile.dev — Development frontend container with hot-reload
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including devDependencies)
+RUN npm ci --no-audit
+
+# Copy source (will be overridden by bind mount in docker-compose.override.yml)
+COPY . .
+
+EXPOSE 5173
+
+# Default dev command - can be overridden in docker-compose
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
