@@ -48,7 +48,15 @@ class PublicStoreSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AgrovetStore
-        fields = ("id", "name", "town", "county", "attendant_phone")
+        fields = (
+            "id",
+            "name",
+            "town",
+            "county",
+            "attendant_phone",
+            "latitude",
+            "longitude",
+        )
 
 
 class PublicProductSerializer(serializers.ModelSerializer):

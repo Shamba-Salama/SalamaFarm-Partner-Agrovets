@@ -6,6 +6,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 from payments.urls import webhook_urlpatterns
+from visits.views import AppVisitsAnalyticsView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -15,8 +16,14 @@ urlpatterns = [
     path("api/v1/", include("catalog.urls")),
     path("api/v1/", include("crm.urls")),
     path("api/v1/marketplace/", include("messaging.marketplace_urls")),
+    path("api/v1/marketplace/", include("visits.marketplace_urls")),
     path("api/v1/", include("messaging.urls")),
     path("api/v1/", include("payments.urls")),
+    path(
+        "api/v1/analytics/app-visits/",
+        AppVisitsAnalyticsView.as_view(),
+        name="app-visits",
+    ),
     path("api/", include(webhook_urlpatterns)),
 ]
 

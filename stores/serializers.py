@@ -15,6 +15,8 @@ class AgrovetStoreSerializer(serializers.ModelSerializer):
             "county",
             "till",
             "attendant_phone",
+            "latitude",
+            "longitude",
             "paystack_subaccount_code",
             "open",
             "onboarded",

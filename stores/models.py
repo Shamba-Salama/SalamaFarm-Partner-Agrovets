@@ -17,6 +17,16 @@ class AgrovetStore(models.Model):
     county = models.CharField(max_length=80)
     till = models.CharField(max_length=20)
     attendant_phone = models.CharField(max_length=20)
+    latitude = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Store map pin — used for customer Get Directions / arrival.",
+    )
+    longitude = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Store map pin — used for customer Get Directions / arrival.",
+    )
     paystack_subaccount_code = models.CharField(
         max_length=64,
         blank=True,
