@@ -84,7 +84,7 @@ jobs:
           cat > /tmp/ssm-params.json <<EOF
           {
             "commands": [
-              "set -euxo pipefail",
+              "set -eu",
               "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${{ needs.build-and-push.outputs.ecr_registry }}",
               "cd /opt/salamafarm",
               "docker compose -f docker-compose.prod.yml pull",

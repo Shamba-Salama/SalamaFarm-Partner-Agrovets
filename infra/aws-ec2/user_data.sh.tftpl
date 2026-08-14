@@ -4,7 +4,12 @@ set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y ca-certificates curl gnupg lsb-release awscli
+apt-get install -y ca-certificates curl gnupg lsb-release unzip
+
+# Ubuntu 24.04 may not provide awscli in apt by default; install AWS CLI v2 directly.
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --update
 
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg

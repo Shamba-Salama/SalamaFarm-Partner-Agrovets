@@ -299,6 +299,7 @@ resource "aws_instance" "app" {
     africastalking_api_key   = var.africastalking_api_key
     africastalking_sender_id = var.africastalking_sender_id
   })
+  user_data_replace_on_change = true
 
   root_block_device {
     volume_type = "gp3"
