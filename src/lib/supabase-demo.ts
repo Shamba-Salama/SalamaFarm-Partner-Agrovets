@@ -462,8 +462,7 @@ export async function demoApiRequest(path: string, options: any): Promise<any> {
 }
 
 export function isSupabaseBackendEnabled(): boolean {
-  // Supabase is the app backend. Django is opt-out only.
-  return import.meta.env.VITE_USE_SUPABASE !== "false";
+  return import.meta.env.VITE_USE_SUPABASE === "true";
 }
 
 /** @deprecated Use isSupabaseBackendEnabled */

@@ -4,7 +4,7 @@ import { demoApiRequest, isSupabaseBackendEnabled } from "./supabase-demo";
 
 export { ApiError } from "./api-error";
 
-const DEFAULT_BASE = "http://127.0.0.1:8000/api/v1";
+const DEFAULT_BASE = import.meta.env.PROD ? "/api/v1" : "http://127.0.0.1:8000/api/v1";
 
 export function getApiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || DEFAULT_BASE;
