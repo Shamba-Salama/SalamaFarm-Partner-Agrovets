@@ -95,6 +95,9 @@ async function supabaseApiRequest<T>(path: string, options: RequestOptions): Pro
     supabaseGetOrders,
     supabaseGetThreads,
     supabaseLogout,
+    supabaseRequestPasswordReset,
+    supabaseEstablishRecoverySession,
+    supabaseCompletePasswordReset,
   } = await import("./supabase-adapter");
 
   const method = (options.method ?? "GET").toUpperCase();
@@ -124,6 +127,17 @@ async function supabaseApiRequest<T>(path: string, options: RequestOptions): Pro
   if (path === "/auth/logout/" && method === "POST") {
     await supabaseLogout();
     return { ok: true } as T;
+  }
+  if (path === "/auth/forgot-password/" && method === "POST") {
+    const payload = typeof body === "string" ? JSON.parse(body) : body;
+    return (await supabaseRequestPasswordReset(String(payload?.email ?? ""))) as T;
+  }
+  if (path === "/auth/recover-session/" && method === "POST") {
+    return (await supabaseEstablishRecoverySession()) as T;
+  }
+  if (path === "/auth/reset-password/" && method === "POST") {
+    const payload = typeof body === "string" ? JSON.parse(body) : body;
+    return (await supabaseCompletePasswordReset(String(payload?.password ?? ""))) as T;
   }
   if (path === "/store/" && method === "GET") {
     return (await supabaseGetStore()) as T;

@@ -252,6 +252,76 @@ export async function supabaseGetThreads() {
   }
 }
 
+export function getPasswordResetRedirectTo() {
+  if (typeof window === "undefined") return undefined;
+  return `${window.location.origin}/reset-password`;
+}
+
+export async function supabaseRequestPasswordReset(email: string) {
+  const supabase = getSupabase();
+  try {
+    const redirectTo = getPasswordResetRedirectTo();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    if (error) throw error;
+    return { ok: true as const };
+  } catch (error) {
+    fail(error, "Could not send reset email", 400);
+  }
+}
+
+export async function supabaseEstablishRecoverySession() {
+  const supabase = getSupabase();
+  try {
+    const takeSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      if (!data.session?.access_token) return false;
+      setTokens(data.session.access_token, data.session.refresh_token ?? "");
+      return true;
+    };
+
+    if (await takeSession()) return { ok: true as const };
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) throw error;
+        url.searchParams.delete("code");
+        const next = `${url.pathname}${url.search}${url.hash}`;
+        window.history.replaceState({}, document.title, next);
+        if (await takeSession()) return { ok: true as const };
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (await takeSession()) return { ok: true as const };
+
+    throw new Error("Reset link is invalid or expired. Request a new one.");
+  } catch (error) {
+    fail(error, "Reset link is invalid or expired. Request a new one.", 400);
+  }
+}
+
+export async function supabaseCompletePasswordReset(password: string) {
+  const supabase = getSupabase();
+  try {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    const { data, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
+    if (data.session?.access_token) {
+      setTokens(data.session.access_token, data.session.refresh_token ?? "");
+    }
+    return { ok: true as const };
+  } catch (error) {
+    fail(error, "Could not update password", 400);
+  }
+}
+
 export async function supabaseLogout() {
   try {
     await getSupabase().auth.signOut();

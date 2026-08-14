@@ -55,6 +55,8 @@ type AuthCtx = {
   isBootstrapping: boolean;
   login: (email: string, password: string) => Promise<VendorMe>;
   register: (input: RegisterInput) => Promise<VendorMe>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  completePasswordReset: (password: string) => Promise<VendorMe | null>;
   logout: () => void;
   refreshMe: () => Promise<VendorMe | null>;
 };
@@ -307,6 +309,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [login, hydrateProfile],
   );
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    try {
+      await api.post("/auth/forgot-password/", { email }, { auth: false });
+    } catch (err) {
+      console.error("Password reset email failed", err);
+      if (err instanceof ApiError) throw err;
+      throw new ApiError(messageFromUnknown(err) || "Could not send reset email.", 0, err);
+    }
+  }, []);
+
+  const completePasswordReset = useCallback(
+    async (password: string) => {
+      try {
+        await api.post("/auth/reset-password/", { password }, { auth: false });
+        try {
+          return await refreshMe();
+        } catch {
+          return null;
+        }
+      } catch (err) {
+        console.error("Password update failed", err);
+        if (err instanceof ApiError) throw err;
+        throw new ApiError(messageFromUnknown(err) || "Could not update password.", 0, err);
+      }
+    },
+    [refreshMe],
+  );
+
   useEffect(() => {
     setUnauthorizedHandler(() => {
       clearTokens();
@@ -381,10 +411,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isBootstrapping,
       login,
       register,
+      requestPasswordReset,
+      completePasswordReset,
       logout,
       refreshMe,
     }),
-    [vendor, isBootstrapping, login, register, logout, refreshMe],
+    [vendor, isBootstrapping, login, register, requestPasswordReset, completePasswordReset, logout, refreshMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

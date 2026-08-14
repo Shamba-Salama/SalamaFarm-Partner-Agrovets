@@ -536,3 +536,15 @@ with check (
 -- ============================================================================
 -- Your schema is ready. All tables are created with proper RLS policies.
 -- Users can now register and their data will be secure and isolated.
+--
+-- PASSWORD RESET (built into Supabase Auth — no extra tables)
+-- Dashboard → Authentication → URL Configuration:
+--   Site URL: your deployed app origin (e.g. https://your-app.vercel.app)
+--   Redirect URLs — add all of these:
+--     http://localhost:8080/reset-password
+--     http://localhost:8080/**
+--     https://*.vercel.app/reset-password
+--     https://YOUR-PRODUCTION-DOMAIN/reset-password
+-- Dashboard → Authentication → Emails:
+--   Keep the "Reset password" template enabled so users receive the link.
+
