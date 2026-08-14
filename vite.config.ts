@@ -12,4 +12,8 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Lovable/local builds keep Nitro's Cloudflare default. Vercel sets VERCEL=1
+  // during `npm run build` and needs the vercel preset so SSR runs as a Function
+  // instead of a Cloudflare worker served as static files (which 500s on GET /).
+  nitro: process.env.VERCEL ? { preset: "vercel" } : {},
 });

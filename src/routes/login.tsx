@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api-client";
-import { useAuth } from "@/lib/auth-context";
 import { formatApiError } from "@/lib/format-api-error";
+import { useAuth } from "@/lib/auth-context";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -47,7 +46,7 @@ function LoginPage() {
       toast.success("Welcome back!");
       void navigate({ to: "/" });
     } catch (err) {
-      toast.error(err instanceof ApiError ? formatApiError(err) : "Could not sign in.");
+      toast.error(formatApiError(err, "Could not sign in."));
     } finally {
       setSubmitting(false);
     }

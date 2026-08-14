@@ -9,7 +9,8 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-import { api, ApiError, setUnauthorizedHandler } from "@/lib/api-client";
+import { api, setUnauthorizedHandler } from "@/lib/api-client";
+import { ApiError, messageFromUnknown } from "@/lib/api-error";
 import { clearTokens, getAccessToken, setTokens } from "@/lib/auth-storage";
 import { usePortal } from "@/lib/portal-store";
 import { apiStoreToProfile, type ApiStore } from "@/lib/store-api";
@@ -206,39 +207,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const tokens = await api.post<TokenPair>(
-        "/auth/token/",
-        { email, password },
-        { auth: false },
-      );
-      setTokens(tokens.access, tokens.refresh);
-      const me = await api.get<VendorMe>("/auth/me/");
-      setVendor(me);
       try {
-        await loadStoreProfile();
-      } catch {
-        if (me.store) {
-          hydrateProfile(
-            apiStoreToProfile({
-              id: me.store.id,
-              name: me.store.name,
-              town: me.store.town,
-              county: me.store.county,
-              till: me.store.till,
-              attendant_phone: me.store.attendant_phone,
-              open: me.store.open,
-              onboarded: me.store.onboarded,
-            }),
-          );
+        const tokens = await api.post<TokenPair>(
+          "/auth/token/",
+          { email, password },
+          { auth: false },
+        );
+        if (!tokens?.access) {
+          throw new ApiError("Login succeeded but no access token was returned.", 500, tokens);
         }
+        setTokens(tokens.access, tokens.refresh);
+        const me = await api.get<VendorMe>("/auth/me/");
+        setVendor(me);
+        try {
+          await loadStoreProfile();
+        } catch {
+          if (me.store) {
+            hydrateProfile(
+              apiStoreToProfile({
+                id: me.store.id,
+                name: me.store.name,
+                town: me.store.town,
+                county: me.store.county,
+                till: me.store.till,
+                attendant_phone: me.store.attendant_phone,
+                open: me.store.open,
+                onboarded: me.store.onboarded,
+              }),
+            );
+          }
+        }
+        await loadProducts();
+        await loadOrders();
+        await loadCustomers();
+        await loadWeeklySales();
+        await loadAppVisits();
+        await loadThreads();
+        return me;
+      } catch (err) {
+        console.error("Sign-in failed", err);
+        if (err instanceof ApiError) throw err;
+        throw new ApiError(messageFromUnknown(err) || "Could not sign in.", 0, err);
       }
-      await loadProducts();
-      await loadOrders();
-      await loadCustomers();
-      await loadWeeklySales();
-      await loadAppVisits();
-      await loadThreads();
-      return me;
     },
     [
       loadStoreProfile,
@@ -254,37 +264,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (input: RegisterInput) => {
-      await api.post(
-        "/auth/register/",
-        {
-          email: input.email,
-          password: input.password,
-          phone: input.phone || input.store.attendant_phone,
-          store: input.store,
-        },
-        { auth: false },
-      );
-      const me = await login(input.email, input.password);
       try {
-        const store = await api.patch<ApiStore>("/store/", { onboarded: true });
-        hydrateProfile(apiStoreToProfile(store));
-        const next = {
-          ...me,
-          store: {
-            id: store.id,
-            name: store.name,
-            town: store.town,
-            county: store.county,
-            till: store.till,
-            attendant_phone: store.attendant_phone,
-            open: store.open,
-            onboarded: store.onboarded,
+        await api.post(
+          "/auth/register/",
+          {
+            email: input.email,
+            password: input.password,
+            phone: input.phone || input.store.attendant_phone,
+            store: input.store,
           },
-        };
-        setVendor(next);
-        return next;
-      } catch {
-        return me;
+          { auth: false },
+        );
+        const me = await login(input.email, input.password);
+        try {
+          const store = await api.patch<ApiStore>("/store/", { onboarded: true });
+          hydrateProfile(apiStoreToProfile(store));
+          const next = {
+            ...me,
+            store: {
+              id: store.id,
+              name: store.name,
+              town: store.town,
+              county: store.county,
+              till: store.till,
+              attendant_phone: store.attendant_phone,
+              open: store.open,
+              onboarded: store.onboarded,
+            },
+          };
+          setVendor(next);
+          return next;
+        } catch (patchErr) {
+          console.warn("Account created but store onboarded flag could not be saved", patchErr);
+          return me;
+        }
+      } catch (err) {
+        console.error("Account creation failed", err);
+        if (err instanceof ApiError) throw err;
+        throw new ApiError(messageFromUnknown(err) || "Could not create account.", 0, err);
       }
     },
     [login, hydrateProfile],

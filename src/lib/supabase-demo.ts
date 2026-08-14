@@ -1,5 +1,5 @@
+import { ApiError } from "./api-error";
 import { clearTokens, getAccessToken, setTokens } from "./auth-storage";
-import { ApiError } from "./api-client";
 
 const DEMO_STORAGE_KEY = "salamafarm_demo_backend_v1";
 const DEMO_USER_KEY = "salamafarm_demo_user_email";
@@ -461,6 +461,12 @@ export async function demoApiRequest(path: string, options: any): Promise<any> {
   return { ok: true };
 }
 
+export function isSupabaseBackendEnabled(): boolean {
+  // Supabase is the app backend. Django is opt-out only.
+  return import.meta.env.VITE_USE_SUPABASE !== "false";
+}
+
+/** @deprecated Use isSupabaseBackendEnabled */
 export function isSupabaseTemporaryBackendEnabled(): boolean {
-  return import.meta.env.VITE_USE_SUPABASE === "true" || Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
+  return isSupabaseBackendEnabled();
 }

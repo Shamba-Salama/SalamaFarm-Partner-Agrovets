@@ -7,9 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api-client";
-import { useAuth } from "@/lib/auth-context";
 import { formatApiError } from "@/lib/format-api-error";
+import { useAuth } from "@/lib/auth-context";
 import { usePortal } from "@/lib/portal-store";
 
 export const Route = createFileRoute("/onboarding")({
@@ -87,7 +86,7 @@ function OnboardingPage() {
       });
       void navigate({ to: "/inventory" });
     } catch (err) {
-      toast.error(err instanceof ApiError ? formatApiError(err) : "Could not create account.");
+      toast.error(formatApiError(err, "Could not create account."));
     } finally {
       setSubmitting(false);
     }

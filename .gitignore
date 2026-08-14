@@ -16,10 +16,9 @@ dist-ssr
 .nitro
 *.local
 
-# Frontend env (keep .env.example)
+# Frontend env (keep .env.example tracked as the template)
 .env
 .env.*.local
-.env.example
 
 # Wrangler / Cloudflare
 .wrangler/
