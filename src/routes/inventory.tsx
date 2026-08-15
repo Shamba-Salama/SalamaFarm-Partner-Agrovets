@@ -47,6 +47,8 @@ import type { ProductWriteBody } from "@/lib/catalog-api";
 import { ApiError } from "@/lib/api-client";
 import { formatApiError } from "@/lib/format-api-error";
 import { CsvImportDialog } from "@/components/portal/CsvImportDialog";
+import { ProductGalleryPicker } from "@/components/portal/ProductGalleryPicker";
+import { galleryItemToFile, type GalleryItem } from "@/lib/product-gallery";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/inventory")({
@@ -373,9 +375,11 @@ function ProductDrawer({
 }) {
   const [draft, setDraft] = useState<ProductWriteBody | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pickingId, setPickingId] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(state?.draft ?? null);
+    setPickingId(null);
   }, [state]);
 
   useEffect(() => {
@@ -406,6 +410,27 @@ function ProductDrawer({
       return;
     }
     setDraft({ ...draft, imageFile: file });
+  };
+
+  const onPickGallery = async (item: GalleryItem) => {
+    if (!draft || pickingId) return;
+    setPickingId(item.id);
+    try {
+      const file = await galleryItemToFile(item);
+      const fillEmpty = !draft.name.trim();
+      setDraft({
+        ...draft,
+        imageFile: file,
+        name: fillEmpty ? item.name : draft.name,
+        category: fillEmpty ? item.category : draft.category,
+        description: fillEmpty || !draft.description.trim() ? item.description : draft.description,
+      });
+      toast.success(`Using ${item.name} photo`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not apply gallery photo.");
+    } finally {
+      setPickingId(null);
+    }
   };
 
   return (
@@ -509,10 +534,11 @@ function ProductDrawer({
                     {draft.imageFile
                       ? `Selected: ${draft.imageFile.name}`
                       : shownImage
-                        ? "Tap to replace with a new JPG or PNG (max 5 MB)."
-                        : "Optional. Farmers see this photo in the mobile marketplace."}
+                        ? "Tap to replace with a new JPG or PNG (max 5 MB), or pick from the Salama gallery below."
+                        : "Upload your own photo, or choose one from the Salama gallery. Farmers see this in the mobile marketplace."}
                   </p>
                 </label>
+                <ProductGalleryPicker onPick={(item) => void onPickGallery(item)} pickingId={pickingId} />
                 {(draft.imageFile || draft.existingImageUrl) && (
                   <Button
                     type="button"
