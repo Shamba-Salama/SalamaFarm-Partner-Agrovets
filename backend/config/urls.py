@@ -68,6 +68,12 @@ urlpatterns = [
 
     # Payment webhooks
     path("api/", include(webhook_urlpatterns)),
+
+    # Health endpoints for liveness/readiness probes
+    path("health/", health, name="health"),
+    path("health.json", health, name="health-json"),
+    path("ready/", ready, name="ready"),
+
 ]
 
 
