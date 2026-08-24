@@ -3,6 +3,19 @@ from django.db import connections
 from django.db.utils import OperationalError
 
 
+def root(request):
+    """Browser landing for the API host. GET / used to 404 with no homepage."""
+    return JsonResponse(
+        {
+            "service": "SalamaFarm Partner Agrovets API",
+            "status": "ok",
+            "health": "/health/",
+            "admin": "/admin/",
+            "api": "/api/v1/",
+        }
+    )
+
+
 def health(request):
     """Lightweight liveness probe."""
     return JsonResponse({"status": "ok"})
