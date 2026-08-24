@@ -8,8 +8,8 @@ databases:
   - name: salamafarm-db
     plan: starter
     # region: e.g. oregon
-
 services:
+  # Backend only: Django API using backend/Dockerfile
   - type: web
     name: salamafarm-backend
     env: docker
