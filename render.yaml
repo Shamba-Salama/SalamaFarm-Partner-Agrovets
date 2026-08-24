@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: salamafarm-backend
+    env: docker
+    branch: backend-only
+    dockerfilePath: Dockerfile
+    plan: starter
+    instanceSize: small
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        value: "<RENDER_MANAGED_POSTGRES_CONNECTION_URL>"
+      - key: SECRET_KEY
+        value: "<your-secret-key>"
