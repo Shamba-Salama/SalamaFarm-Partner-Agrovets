@@ -31,25 +31,34 @@ _LANDING_HTML = """<!DOCTYPE html>
 """
 
 
+def _no_store(response):
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
+    return response
+
+
 def root(request):
     """Browser landing for the API host."""
     accept = request.headers.get("Accept", "")
     if "text/html" in accept:
-        return HttpResponse(_LANDING_HTML)
-    return JsonResponse(
-        {
-            "service": "SalamaFarm Partner Agrovets API",
-            "status": "ok",
-            "health": "/health/",
-            "admin": "/admin/",
-            "api": "/api/v1/",
-        }
+        return _no_store(HttpResponse(_LANDING_HTML))
+    return _no_store(
+        JsonResponse(
+            {
+                "service": "SalamaFarm Partner Agrovets API",
+                "status": "ok",
+                "engine": "django",
+                "health": "/health/",
+                "admin": "/admin/",
+                "api": "/api/v1/",
+            }
+        )
     )
 
 
 def health(request):
     """Lightweight liveness probe."""
-    return JsonResponse({"status": "ok"})
+    return _no_store(JsonResponse({"status": "ok", "engine": "django"}))
 
 
 def ready(request):
