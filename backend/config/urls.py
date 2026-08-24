@@ -7,9 +7,10 @@ from django.urls import include, path
 
 from payments.urls import webhook_urlpatterns
 from visits.views import AppVisitsAnalyticsView
-from core.health import health, ready
+from core.health import health, ready, root
 
 urlpatterns = [
+    path("", root, name="root"),
     path("admin/", admin.site.urls),
     path("api/v1/auth/", include("accounts.urls")),
     path("api/v1/customer-auth/", include("customers.urls")),
