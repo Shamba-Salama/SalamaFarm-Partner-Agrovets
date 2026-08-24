@@ -1,50 +1,34 @@
-# Render blueprint for SalamaFarm Partner Agrovets backend
-# - Declares a managed Postgres database and a Docker web service
-# - After Render provisions the DB, copy its connection string into the
-#   `DATABASE_URL` env var below (or set it as a Render secret named
-#   `DATABASE_URL`). Do NOT commit actual secrets into this file.
+# Render Blueprint — Django API only (not the nginx frontend).
+# https://render.com/docs/blueprint-spec
+#
+# In the existing service dashboard, set Dockerfile Path to backend/Dockerfile
+# and Docker Context to backend. The repo-root Dockerfile is the frontend
+# (nginx) and is what currently serves "Welcome to nginx!".
 
 databases:
   - name: salamafarm-db
-    plan: starter
-    # region: e.g. oregon
+    plan: basic-256mb
+
 services:
-  # Backend only: Django API using backend/Dockerfile
   - type: web
-    name: salamafarm-backend
-    env: docker
-    branch: main
-    dockerfilePath: backend/Dockerfile
+    name: salamafarm-partner-agrovets
+    runtime: docker
     plan: starter
-    instanceSize: small
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health/
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.prod
-      - key: PORT
-        value: "8000"
-      # After provisioning the database, set DATABASE_URL to the
-      # managed Postgres connection string from Render (copy from the
-      # Render dashboard or inject as a secret). Example placeholder:
-      - key: DATABASE_URL
-        value: "<RENDER_MANAGED_POSTGRES_CONNECTION_URL>"
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
       - key: SECRET_KEY
-        value: "<your-secret-key>"
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: salamafarm-db
+          property: connectionString
       - key: PAYSTACK_SECRET_KEY
-        value: "<paystack-secret>"
+        sync: false
       - key: PAYSTACK_PUBLIC_KEY
-        value: "<paystack-public>"
-
-# Notes:
-# - Provision the `salamafarm-db` database in Render; Render will display the
-#   connection string (postgres://...) — copy it into the `DATABASE_URL` env
-#   var for the `salamafarm-backend` service, or create a Render secret named
-#   `DATABASE_URL` and set its value to the connection string.
-# - Do NOT store secrets in version control. Use the Render dashboard to set
-#   any production credentials.
-
-# NOTE: Do NOT commit secrets into this file. Set the following values
-# as environment variables or Render secrets in the Render dashboard:
-# - SECRET_KEY
-# - DATABASE_URL (Postgres) or configure a managed Postgres service in Render
-# - PAYSTACK_SECRET_KEY, PAYSTACK_PUBLIC_KEY
-# - Any other third-party credentials (SENTRY_DSN, etc.)
+        sync: false
