@@ -158,3 +158,28 @@ Activate the venv first (`source .venv/bin/activate`) or call `.venv/bin/python`
 
 - `AUTH_USER_MODEL = accounts.VendorUser` — email login (`USERNAME_FIELD = email`).
 - Keep `.env` out of git (listed in `backend/.gitignore`).
+
+## Deploying to Render
+
+1. Create a new **Web Service** in Render using the repository root. Choose "Docker" as the environment and set the Dockerfile path to `backend/Dockerfile` (or use the provided `render.yaml`).
+
+2. Add the following environment variables / secrets in the Render dashboard (do NOT commit them to the repo):
+	- `SECRET_KEY` — Django secret key
+	- `DATABASE_URL` — Postgres connection (use Render's managed Postgres or an external DB)
+	- `DJANGO_SETTINGS_MODULE=config.settings.prod` (can be set in `render.yaml`)
+	- `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` (for payments)
+	- Any other service credentials (SENTRY_DSN, AWS credentials for media, etc.)
+
+3. If you use Render Postgres, create a managed Postgres instance and set `DATABASE_URL` from the database's connection string.
+
+4. Ensure static/media storage is configured. The Dockerfile runs `collectstatic` into `/app/staticfiles` and the app serves static files via the chosen production settings. For durable media, configure an external storage (S3-compatible) and set related env vars in `config.settings.prod`.
+
+5. Deploy: Render will build the Docker image, run migrations and collectstatic (the `backend/Dockerfile` already runs `manage.py migrate` and `collectstatic` at container start), and start `gunicorn` on port 8000.
+
+6. Post-deploy checks:
+	- Visit the service URL and confirm the API responds.
+	- Confirm webhooks (Paystack) are reachable from Render (set webhook URL in Paystack dashboard).
+
+7. Local testing: to simulate production locally, set `DJANGO_SETTINGS_MODULE=config.settings.prod` and ensure `.env` contains the production-like variables.
+
+If you'd like, I can also add a `Procfile`, Kubernetes manifests, or a Render cron job for periodic tasks.
