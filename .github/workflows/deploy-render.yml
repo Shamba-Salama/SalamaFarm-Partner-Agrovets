@@ -14,11 +14,20 @@ jobs:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
         run: |
           if [ -z "$RENDER_SERVICE_ID" ] || [ -z "$RENDER_API_KEY" ]; then
-            echo "RENDER_SERVICE_ID and RENDER_API_KEY must be set in repository secrets";
-            exit 1;
+            echo "RENDER_SERVICE_ID / RENDER_API_KEY are not set."
+            echo "Skipping the API trigger. Connect the GitHub repo in Render for auto-deploy, or add those two repository secrets."
+            exit 0
           fi
 
-          curl -s -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
+          http_code=$(curl -sS -o /tmp/render-deploy.json -w "%{http_code}" \
+            -X POST "https://api.render.com/v1/services/${RENDER_SERVICE_ID}/deploys" \
             -H "Authorization: Bearer ${RENDER_API_KEY}" \
             -H "Content-Type: application/json" \
-            -d '{"clearCache":true}'
+            -d '{"clearCache": true}')
+
+          cat /tmp/render-deploy.json
+          echo
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Render deploy trigger failed with HTTP $http_code"
+            exit 1
+          fi
