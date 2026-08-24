@@ -1,38 +1,41 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# SalamaFarm Partner Agrovets — React frontend (Vite/TanStack Start)
-# Multi-stage build: Node.js 20 → nginx:alpine
+# Default image for this repo (Render, GHCR backend, local `docker build .`)
+# Django API from backend/. Not the nginx frontend.
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Build stage
-FROM node:20-alpine AS build
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DJANGO_SETTINGS_MODULE=config.settings.prod
 
 WORKDIR /app
 
-# Copy package files for dependency caching
-COPY package*.json ./
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpq-dev \
+        gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN npm install --no-audit
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY . .
+COPY backend/ .
 
-# Build for production - configurable API URL
-ARG VITE_API_BASE_URL=http://localhost:8000/api/v1
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+RUN addgroup --system django && adduser --system --ingroup django django \
+ && mkdir -p /app/staticfiles /app/media \
+ && chown -R django:django /app
 
-RUN npm run build
+USER django
 
-# Production stage
-FROM nginx:alpine
+EXPOSE 8000
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# TanStack Start/Nitro emits static assets to .output/public
-COPY --from=build /app/.output/public /usr/share/nginx/html
-
-EXPOSE 80
-
-# Use nginx with daemon off
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["sh", "-c", \
+     "python manage.py migrate --noinput && \
+      python manage.py collectstatic --noinput && \
+      gunicorn config.wsgi:application \
+        --bind 0.0.0.0:${PORT:-8000} \
+        --workers 2 \
+        --timeout 120 \
+        --access-logfile - \
+        --error-logfile -"]

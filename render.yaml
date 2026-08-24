@@ -1,9 +1,6 @@
-# Render Blueprint — Django API only (not the nginx frontend).
-# https://render.com/docs/blueprint-spec
-#
-# In the existing service dashboard, set Dockerfile Path to backend/Dockerfile
-# and Docker Context to backend. The repo-root Dockerfile is the frontend
-# (nginx) and is what currently serves "Welcome to nginx!".
+# Render Blueprint — Django API (repo-root Dockerfile now builds backend/).
+# Existing services that used the default Dockerfile Path will pick this up
+# on the next deploy without a dashboard change.
 
 databases:
   - name: salamafarm-db
@@ -14,8 +11,8 @@ services:
     name: salamafarm-partner-agrovets
     runtime: docker
     plan: starter
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /health/
     envVars:
       - key: DJANGO_SETTINGS_MODULE
