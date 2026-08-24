@@ -20,8 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Python dependencies first (layer-caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir gunicorn==23.0.0
+ && pip install --no-cache-dir -r requirements.txt
 
 # Copy project source
 COPY . .
@@ -38,14 +37,13 @@ USER django
 
 EXPOSE 8000
 
-# collect static at container start (harmless on re-runs; fast with the
-# staticfiles already present from a prior run because it uses caching)
+# Render injects $PORT at runtime. Local Docker still defaults to 8000.
 CMD ["sh", "-c", \
      "python manage.py migrate --noinput && \
       python manage.py collectstatic --noinput && \
       gunicorn config.wsgi:application \
-        --bind 0.0.0.0:8000 \
-        --workers 4 \
+        --bind 0.0.0.0:${PORT:-8000} \
+        --workers 2 \
         --timeout 120 \
         --access-logfile - \
         --error-logfile -"]
