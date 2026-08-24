@@ -4,6 +4,7 @@ Shared Django settings for SalamaFarm Partner Agrovets API.
 
 from datetime import timedelta
 from pathlib import Path
+import os
 
 import environ
 
@@ -80,6 +81,14 @@ DATABASES = {
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
     )
 }
+# django-environ treats DATABASE_URL="" as postgres://localhost — override that.
+if not os.environ.get("DATABASE_URL", "").strip():
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
