@@ -7,6 +7,7 @@ from django.urls import include, path
 
 from payments.urls import webhook_urlpatterns
 from visits.views import AppVisitsAnalyticsView
+from core.health import health, ready
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -25,6 +26,9 @@ urlpatterns = [
         name="app-visits",
     ),
     path("api/", include(webhook_urlpatterns)),
+    # Health endpoints for liveness/readiness probes
+    path("health/", health, name="health"),
+    path("ready/", ready, name="ready"),
 ]
 
 if settings.DEBUG:
