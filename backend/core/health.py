@@ -22,7 +22,7 @@ _LANDING_HTML = """<!DOCTYPE html>
   <p>The backend is running. This host is the JSON API, not the vendor portal website.</p>
   <p class="box">Status: <strong>ok</strong></p>
   <ul>
-    <li><a href="/health/">/health/</a> — liveness check</li>
+    <li><a href="/health.json">/health.json</a> — same check, uncached path</li>
     <li><a href="/admin/">/admin/</a> — Django admin</li>
     <li><a href="/api/v1/marketplace/products/">/api/v1/marketplace/products/</a> — public catalog</li>
   </ul>
