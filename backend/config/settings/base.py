@@ -124,6 +124,10 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "otp-request": env("OTP_REQUEST_THROTTLE", default="5/hour"),
         "otp-verify": env("OTP_VERIFY_THROTTLE", default="10/hour"),
+        "customer-login": env("CUSTOMER_LOGIN_THROTTLE", default="20/hour"),
+        "customer-register": env("CUSTOMER_REGISTER_THROTTLE", default="10/hour"),
+        "customer-google": env("CUSTOMER_GOOGLE_THROTTLE", default="30/hour"),
+        "customer-password-reset": env("CUSTOMER_PASSWORD_RESET_THROTTLE", default="10/hour"),
     },
 }
 
@@ -156,3 +160,18 @@ AFRICASTALKING_SENDER_ID = env("AFRICASTALKING_SENDER_ID", default="")
 OTP_DEV_MODE = env.bool("OTP_DEV_MODE", default=False)
 OTP_TTL_SECONDS = env.int("OTP_TTL_SECONDS", default=300)  # 5 min
 OTP_MAX_ATTEMPTS = env.int("OTP_MAX_ATTEMPTS", default=5)
+PASSWORD_RESET_TTL_SECONDS = env.int("PASSWORD_RESET_TTL_SECONDS", default=900)  # 15 min
+PASSWORD_RESET_DEV_MODE = env.bool("PASSWORD_RESET_DEV_MODE", default=True)
+
+# Comma-separated OAuth client IDs (Android, iOS, Web) accepted as Google ID token audience.
+GOOGLE_OAUTH_CLIENT_IDS = [
+    part.strip()
+    for part in env("GOOGLE_OAUTH_CLIENT_IDS", default="").split(",")
+    if part.strip()
+]
+
+# Org bootstrap accounts (used by seed_org_customer_accounts; passwords via env only)
+ORG_SUPERADMIN_EMAIL = env("ORG_SUPERADMIN_EMAIL", default="info@salamafarm.com")
+ORG_SUPERADMIN_PASSWORD = env("ORG_SUPERADMIN_PASSWORD", default="")
+ORG_DEVELOPER_EMAIL = env("ORG_DEVELOPER_EMAIL", default="technicalofficer@salamafarm.com")
+ORG_DEVELOPER_PASSWORD = env("ORG_DEVELOPER_PASSWORD", default="")

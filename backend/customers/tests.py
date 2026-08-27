@@ -155,8 +155,10 @@ class OTPAuthFlowTests(APITestCase):
         self.assertEqual(patched.status_code, 200, patched.data)
         self.assertEqual(patched.data["full_name"], "Jane Farmer")
         self.assertEqual(patched.data["latitude"], -0.3)
-        # phone is read-only — the attempt to change it is ignored.
-        self.assertEqual(patched.data["phone"], "+254712000010")
+        # Phone is writable so farmers can add/update M-Pesa numbers after signup.
+        self.assertEqual(patched.data["phone"], "+254799999999")
+        # email stays read-only when absent on legacy OTP accounts
+        self.assertIn("email", patched.data)
 
     def test_token_refresh_returns_working_access(self):
         _, refresh = self._login(phone="0712000011")
@@ -207,3 +209,72 @@ class AudienceSeparationTests(APITestCase):
         refresh = issue_customer_tokens(self.customer)["refresh"]
         self._auth(refresh)  # refresh token presented as a Bearer access token
         self.assertIn(self.client.get(self.customer_me).status_code, (401, 403))
+
+
+class EmailPasswordAuthTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.register_url = reverse("customer-register")
+        self.login_url = reverse("customer-login")
+        self.me_url = reverse("customer-me")
+
+    def test_register_and_login(self):
+        payload = {
+            "full_name": "Jane Farmer",
+            "email": "jane@example.com",
+            "password": "FarmPass1!",
+            "location": "Nakuru",
+            "farm_type": "mixed",
+            "farm_name": "Green Acres",
+            "phone": "0712000099",
+        }
+        reg = self.client.post(self.register_url, payload, format="json")
+        self.assertEqual(reg.status_code, 200, reg.data)
+        self.assertTrue(reg.data["is_new"])
+        self.assertEqual(reg.data["customer"]["email"], "jane@example.com")
+        self.assertEqual(reg.data["customer"]["phone"], "+254712000099")
+        self.assertIn("access", reg.data)
+
+        login = self.client.post(
+            self.login_url,
+            {"email": "Jane@example.com", "password": "FarmPass1!"},
+            format="json",
+        )
+        self.assertEqual(login.status_code, 200, login.data)
+        self.assertFalse(login.data["is_new"])
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+        me = self.client.get(self.me_url)
+        self.assertEqual(me.status_code, 200, me.data)
+        self.assertEqual(me.data["full_name"], "Jane Farmer")
+
+    def test_login_rejects_bad_password(self):
+        account = CustomerAccount(email="bob@example.com", full_name="Bob", location="Kisumu")
+        account.set_password("GoodPass1!")
+        account.auth_provider = CustomerAccount.AuthProvider.EMAIL
+        account.save()
+        bad = self.client.post(
+            self.login_url,
+            {"email": "bob@example.com", "password": "wrong"},
+            format="json",
+        )
+        self.assertEqual(bad.status_code, 400, bad.data)
+        self.assertEqual(bad.data["code"], "invalid_credentials")
+
+    def test_duplicate_email_rejected(self):
+        CustomerAccount.objects.create(
+            email="dup@example.com",
+            full_name="One",
+            auth_provider=CustomerAccount.AuthProvider.EMAIL,
+        )
+        resp = self.client.post(
+            self.register_url,
+            {
+                "full_name": "Two",
+                "email": "dup@example.com",
+                "password": "FarmPass1!",
+                "location": "Eldoret",
+                "farm_type": "crop",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.data)

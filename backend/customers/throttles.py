@@ -1,9 +1,8 @@
-"""Rate throttles for the unauthenticated OTP endpoints.
+"""Rate throttles for unauthenticated customer-auth endpoints.
 
-Keyed by phone number rather than client IP: the resource we are protecting is
-per-phone SMS spend, and many farmers may legitimately share one NAT'd IP.
-Falls back to no throttling when the request carries no phone (the serializer
-will reject it anyway with a 400).
+OTP throttles are keyed by phone. Email/login throttles are keyed by email
+(or IP fallback) to limit credential stuffing without blocking shared NATs
+as harshly as a pure IP bucket would.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ class _PhoneScopedThrottle(SimpleRateThrottle):
         try:
             ident = normalize_kenya_msisdn(phone)
         except ValueError:
-            ident = phone  # invalid phone still gets a stable bucket
+            ident = phone
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
@@ -31,3 +30,37 @@ class OTPRequestThrottle(_PhoneScopedThrottle):
 
 class OTPVerifyThrottle(_PhoneScopedThrottle):
     scope = "otp-verify"
+
+
+class _EmailScopedThrottle(SimpleRateThrottle):
+    def get_cache_key(self, request, view):
+        email = (request.data.get("email") or "").strip().lower()
+        if email:
+            ident = email
+        else:
+            ident = self.get_ident(request)
+        if not ident:
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
+class CustomerLoginThrottle(_EmailScopedThrottle):
+    scope = "customer-login"
+
+
+class CustomerRegisterThrottle(_EmailScopedThrottle):
+    scope = "customer-register"
+
+
+class CustomerGoogleThrottle(SimpleRateThrottle):
+    scope = "customer-google"
+
+    def get_cache_key(self, request, view):
+        ident = self.get_ident(request)
+        if not ident:
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
+class PasswordResetThrottle(_EmailScopedThrottle):
+    scope = "customer-password-reset"
