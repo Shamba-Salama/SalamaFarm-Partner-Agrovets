@@ -79,10 +79,11 @@ STORAGES = {
 
 def _configure_database() -> dict:
     """
-    Render has no Postgres on localhost.
+    Require a real Postgres DATABASE_URL on Render.
 
-    Prevent Django from trying to connect to localhost when DATABASE_URL
-    is missing or incorrectly configured on Render.
+    Falling back to sqlite on Render's filesystem can wipe users/products
+    after redeploys. Fail loudly instead so production misconfiguration
+    is detected immediately.
     """
 
     raw = os.environ.get("DATABASE_URL", "").strip()
@@ -93,11 +94,11 @@ def _configure_database() -> dict:
 
     if not raw or raw.startswith("<"):
         if on_render:
-            print(
-                "WARNING: DATABASE_URL is not set. "
-                "Using ephemeral sqlite. "
-                "Create a Render PostgreSQL database and set DATABASE_URL "
-                "to its Internal Database URL."
+            raise ImproperlyConfigured(
+                "DATABASE_URL is not set. Create a Render PostgreSQL database "
+                "and set DATABASE_URL to its Internal Database URL "
+                "(Dashboard → PostgreSQL → Connect), or link it via "
+                "render.yaml fromDatabase."
             )
 
         return {
@@ -106,16 +107,10 @@ def _configure_database() -> dict:
         }
 
     if on_render and host in {"localhost", "127.0.0.1", "::1"}:
-        print(
-            "WARNING: DATABASE_URL points at localhost, which does not exist "
-            "on Render. Using ephemeral sqlite until you set DATABASE_URL "
-            "to a Render Postgres Internal URL."
+        raise ImproperlyConfigured(
+            "DATABASE_URL points at localhost, which does not exist on Render. "
+            "Set DATABASE_URL to the Render Postgres Internal Database URL."
         )
-
-        return {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": str(BASE_DIR / "db.sqlite3"),
-        }
 
     config = env.db("DATABASE_URL")
 
