@@ -2,15 +2,19 @@
 # Existing services that used the default Dockerfile Path will pick this up
 # on the next deploy without a dashboard change.
 
+# Free Postgres persists across web-service redeploys (unlike ephemeral sqlite).
+# Free DBs expire after 30 days unless upgraded — export/upgrade before then.
 databases:
   - name: salamafarm-db
-    plan: basic-256mb
+    plan: free
+    databaseName: salamafarm
+    user: salamafarm
 
 services:
   - type: web
     name: salamafarm-partner-agrovets
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health/

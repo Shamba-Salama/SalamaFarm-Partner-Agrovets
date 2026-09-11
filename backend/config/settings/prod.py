@@ -38,8 +38,10 @@ STORAGES = {
 
 
 def _configure_database() -> dict:
-    """Render has no Postgres on localhost. Empty/local DATABASE_URL used to
-    make django-environ default to postgres://localhost:5432 and crash migrate.
+    """Require a real Postgres DATABASE_URL on Render.
+
+    Falling back to sqlite on the free web filesystem wiped users/products on
+    every redeploy. Fail loudly instead so misconfiguration is obvious.
     """
     raw = os.environ.get("DATABASE_URL", "").strip()
     on_render = bool(os.environ.get("RENDER"))
@@ -47,10 +49,10 @@ def _configure_database() -> dict:
 
     if not raw or raw.startswith("<"):
         if on_render:
-            print(
-                "WARNING: DATABASE_URL is not set. Using ephemeral sqlite. "
-                "Create a Render PostgreSQL database and set DATABASE_URL to "
-                "its Internal Database URL."
+            raise ImproperlyConfigured(
+                "DATABASE_URL is not set. Create a Render PostgreSQL database "
+                "and set DATABASE_URL to its Internal Database URL (Dashboard → "
+                "PostgreSQL → Connect), or link it via render.yaml fromDatabase."
             )
         return {
             "ENGINE": "django.db.backends.sqlite3",
@@ -58,16 +60,10 @@ def _configure_database() -> dict:
         }
 
     if on_render and host in {"localhost", "127.0.0.1", "::1"}:
-        print(
-            "WARNING: DATABASE_URL points at localhost, which does not exist "
-            "on Render. Using ephemeral sqlite until you set DATABASE_URL to "
-            "a Render Postgres Internal URL (Dashboard → PostgreSQL → "
-            "Connections → Internal Database URL)."
+        raise ImproperlyConfigured(
+            "DATABASE_URL points at localhost, which does not exist on Render. "
+            "Set DATABASE_URL to the Render Postgres Internal Database URL."
         )
-        return {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": str(BASE_DIR / "db.sqlite3"),
-        }
 
     config = env.db("DATABASE_URL")
     if on_render:
