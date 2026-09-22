@@ -1,6 +1,8 @@
+import logoSrc from "@/assets/salamafarm-logo.jpg";
 import { cn } from "@/lib/utils";
 
-export const SALAMAFARM_LOGO_SRC = "/salamafarm-logo.jpg";
+/** Bundled logo URL (hashed in production so Vercel CDN cannot serve a stale public file). */
+export const SALAMAFARM_LOGO_SRC = logoSrc;
 
 type BrandLogoProps = {
   className?: string;
