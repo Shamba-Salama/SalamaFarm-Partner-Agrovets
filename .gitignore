@@ -43,3 +43,5 @@ backend/**/*.py[cod]
 *.njsproj
 *.sln
 *.sw?
+.vercel/output
+.vercel
