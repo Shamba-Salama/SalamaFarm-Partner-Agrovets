@@ -51,11 +51,11 @@ export function ChatDrawer() {
         {thread && (
           <>
             <SheetHeader className="border-b border-border p-4">
-              <SheetTitle className="flex flex-wrap items-center gap-2">
-                {thread.farmer}
+              <SheetTitle className="flex flex-wrap items-center gap-2 text-left">
+                <span className="min-w-0 break-words">{thread.farmer}</span>
                 <ChannelBadge channel={thread.channel} />
               </SheetTitle>
-              <SheetDescription>
+              <SheetDescription className="truncate">
                 +{thread.phone} · {thread.topic}
               </SheetDescription>
             </SheetHeader>

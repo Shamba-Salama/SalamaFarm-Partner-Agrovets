@@ -6,16 +6,29 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-const djangoOrigin = (process.env.DJANGO_API_ORIGIN || "http://34.255.196.223:8000").replace(
-  /\/$/,
-  "",
-);
+// Live Render API. Previous EC2 origin kept for reference:
+// const djangoOrigin = (process.env.DJANGO_API_ORIGIN || "http://34.255.196.223:8000").replace(/\/$/, "");
+const djangoOrigin = (
+  process.env.DJANGO_API_ORIGIN || "https://salamafarm-partner-agrovets.onrender.com"
+).replace(/\/$/, "");
 
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+  },
+  // Local browser → /api/** → Render (no CORS). Vercel build uses Nitro proxy the same way.
+  vite: {
+    server: {
+      proxy: {
+        "/api": {
+          target: djangoOrigin,
+          changeOrigin: true,
+          secure: true,
+        },
+      },
+    },
   },
   // Lovable/local builds keep Nitro's Cloudflare default. Vercel sets VERCEL=1
   // during `npm run build` and needs the vercel preset so SSR runs as a Function

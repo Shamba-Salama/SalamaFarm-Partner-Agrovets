@@ -182,11 +182,18 @@ function InventoryPage() {
       subtitle={`${products.length} products in your catalogue`}
       actions={
         <>
-          <Button size="sm" variant="outline" onClick={() => setCsvOpen(true)}>
-            <Upload className="mr-1.5 h-4 w-4" /> Import CSV
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => setCsvOpen(true)}>
+            <Upload className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Import CSV</span>
           </Button>
-          <Button size="sm" onClick={() => setDrawer({ mode: "create", draft: emptyDraft() })}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add Product
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => setDrawer({ mode: "create", draft: emptyDraft() })}
+          >
+            <Plus className="h-4 w-4 sm:mr-1.5" />
+            <span className="sm:hidden">Add</span>
+            <span className="hidden sm:inline">Add Product</span>
           </Button>
         </>
       }

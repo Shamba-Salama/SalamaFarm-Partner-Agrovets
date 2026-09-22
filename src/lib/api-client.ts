@@ -4,7 +4,10 @@ import { demoApiRequest, isSupabaseBackendEnabled } from "./supabase-demo";
 
 export { ApiError } from "./api-error";
 
-const DEFAULT_BASE = import.meta.env.PROD ? "/api/v1" : "http://127.0.0.1:8000/api/v1";
+// Prefer env. Fallback: same-origin /api (Vite/Nitro proxy) so local/dev avoids CORS.
+// const DEFAULT_BASE = "https://salamafarm-partner-agrovets.onrender.com/api/v1";
+// const DEFAULT_BASE = "http://34.255.196.223:8000/api/v1";
+const DEFAULT_BASE = "/api/v1";
 
 export function getApiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || DEFAULT_BASE;
