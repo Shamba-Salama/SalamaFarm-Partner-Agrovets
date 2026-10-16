@@ -2,6 +2,10 @@
 
 Django REST API for the agrovet vendor portal (multi-tenant, JWT, Paystack Kenya).
 
+## Live Hostinger VPS operations
+
+The Django API is currently served from the Hostinger VPS at `https://api-next.salamafarm.com`. See the repository's [`HOSTINGER_VPS_OPERATIONS.md`](../HOSTINGER_VPS_OPERATIONS.md) for the live topology, operational checks, encrypted backups, schedule, and recovery caveats. The Render configuration below is retained as deployment configuration/reference and does not describe the current VPS runtime.
+
 ## Requirements
 
 - **Python 3.12.13** at `/usr/local/bin/python3.12` (do **not** use the macOS system `python3`, which is older)
