@@ -6,10 +6,10 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-// Live Render API. Previous EC2 origin kept for reference:
+// Live API. Previous EC2 origin kept for reference:
 // const djangoOrigin = (process.env.DJANGO_API_ORIGIN || "http://34.255.196.223:8000").replace(/\/$/, "");
 const djangoOrigin = (
-  process.env.DJANGO_API_ORIGIN || "https://salamafarm-partner-agrovets.onrender.com"
+  process.env.DJANGO_API_ORIGIN || "https://api.salamafarm.com"
 ).replace(/\/$/, "");
 
 export default defineConfig({
@@ -18,7 +18,7 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  // Local browser → /api/** → Render (no CORS). Vercel build uses Nitro proxy the same way.
+  // Local browser → /api/** → API server (no CORS). Vercel build uses Nitro proxy the same way.
   vite: {
     server: {
       proxy: {

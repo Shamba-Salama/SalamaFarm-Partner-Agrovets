@@ -7,7 +7,11 @@ DEBUG = False
 
 ALLOWED_HOSTS = env.list(
     "ALLOWED_HOSTS",
-    default=["localhost", "127.0.0.1", "salamafarm-partner-agrovets.onrender.com"],
+    default=[
+        "localhost",
+        "127.0.0.1",
+        "api.salamafarm.com",
+    ],
 )
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",

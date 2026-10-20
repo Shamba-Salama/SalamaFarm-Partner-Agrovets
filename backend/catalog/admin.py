@@ -9,15 +9,16 @@ class ProductAdmin(admin.ModelAdmin):
         "name",
         "store",
         "category",
+        "status",
         "price",
         "stock",
         "expiry",
         "active",
         "updated_at",
     )
-    list_filter = ("category", "active", "store")
+    list_filter = ("status", "category", "active", "store")
     search_fields = ("name", "description", "store__name")
     readonly_fields = ("created_at", "updated_at")
     raw_id_fields = ("store",)
     list_select_related = ("store",)
-    list_editable = ("active",)
+    list_editable = ("status", "active")

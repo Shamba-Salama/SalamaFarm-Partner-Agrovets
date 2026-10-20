@@ -5,7 +5,7 @@ import { demoApiRequest, isSupabaseBackendEnabled } from "./supabase-demo";
 export { ApiError } from "./api-error";
 
 // Prefer env. Fallback: same-origin /api (Vite/Nitro proxy) so local/dev avoids CORS.
-// const DEFAULT_BASE = "https://salamafarm-partner-agrovets.onrender.com/api/v1";
+// const DEFAULT_BASE = "https://api.salamafarm.com/api/v1";
 // const DEFAULT_BASE = "http://34.255.196.223:8000/api/v1";
 const DEFAULT_BASE = "/api/v1";
 
