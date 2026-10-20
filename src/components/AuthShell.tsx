@@ -9,22 +9,30 @@ type AuthShellProps = {
   children: ReactNode;
 };
 
-/** Split auth layout: compact brand strip on mobile, full-height green | white on desktop. */
+/** Mobile: logo on the page background, no green. Desktop (lg+): green | white split. */
 export function AuthShell({ headline, description, footer, children }: AuthShellProps) {
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
-      <aside className="flex flex-col justify-between bg-sidebar px-5 py-4 sm:px-8 sm:py-4 md:py-8 lg:min-h-svh lg:p-12">
-        <BrandLogo tone="sidebar" markClassName="h-12 sm:h-14" />
-        <div className="mt-5 hidden max-w-md md:block lg:mt-0">
-          <h2 className="text-xl font-semibold leading-tight text-sidebar-foreground sm:text-2xl lg:text-3xl">
+      <aside className="flex flex-col justify-between bg-transparent px-4 pb-0 pt-8 sm:px-8 lg:min-h-svh lg:bg-sidebar lg:p-12">
+        {/* Mobile / tablet logo: sits on the page background, centered */}
+        <div className="flex justify-center lg:hidden">
+          <BrandLogo tone="plain" markClassName="h-16 object-center sm:h-20" />
+        </div>
+
+        {/* Desktop logo: on the green panel */}
+        <div className="hidden lg:block">
+          <BrandLogo tone="sidebar" markClassName="h-14" />
+        </div>
+
+        <div className="hidden max-w-md lg:mt-0 lg:block">
+          <h2 className="text-3xl font-semibold leading-tight text-sidebar-foreground">
             {headline}
           </h2>
-          <p className="mt-2 text-sm text-sidebar-foreground/75 sm:mt-3">{description}</p>
+          <p className="mt-3 text-sm text-sidebar-foreground/75">{description}</p>
         </div>
+
         {footer ? (
-          <p className="mt-6 hidden text-sm text-sidebar-foreground/75 lg:mt-0 lg:block">
-            {footer}
-          </p>
+          <p className="hidden text-sm text-sidebar-foreground/75 lg:block">{footer}</p>
         ) : (
           <span className="hidden lg:block" aria-hidden />
         )}

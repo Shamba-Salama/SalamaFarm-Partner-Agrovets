@@ -13,8 +13,9 @@ type BrandLogoProps = {
   /**
    * `sidebar` = logo on dark/green panels → white pad.
    * `light` = logo on white/light panels → brand-color pad.
+   * `plain` = logo on a light page → rounded white tile with a soft shadow.
    */
-  tone?: "sidebar" | "light";
+  tone?: "sidebar" | "light" | "plain";
 };
 
 export function BrandLogo({
@@ -30,8 +31,12 @@ export function BrandLogo({
     <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
       <div
         className={cn(
-          "inline-flex w-fit max-w-full items-center justify-center rounded-lg p-2 shadow-sm",
-          tone === "sidebar" ? "bg-white" : "bg-primary",
+          "inline-flex w-fit max-w-full items-center justify-center",
+          tone === "plain"
+            ? "rounded-2xl bg-white p-1.5 shadow-md ring-1 ring-black/5"
+            : "rounded-lg p-2 shadow-sm",
+          tone === "sidebar" && "bg-white",
+          tone === "light" && "bg-primary",
         )}
       >
         <img
@@ -39,6 +44,7 @@ export function BrandLogo({
           alt="Salama Farm"
           className={cn(
             "h-12 w-auto max-w-full shrink-0 object-contain object-left",
+            tone === "plain" && "rounded-xl",
             markClassName,
           )}
         />
