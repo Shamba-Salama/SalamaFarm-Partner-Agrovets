@@ -10,6 +10,7 @@ from visits.views import AppVisitsAnalyticsView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/upload-url/", include("core.urls")),
     path("api/v1/auth/", include("accounts.urls")),
     path("api/v1/customer-auth/", include("customers.urls")),
     path("api/v1/store/", include("stores.urls")),

@@ -12,4 +12,6 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Do not set ssr.optimizeDeps.include for @tanstack/* — pre-bundling can resolve a second
+  // copy of react and break SSR with "Invalid hook call" / useContext on null.
 });

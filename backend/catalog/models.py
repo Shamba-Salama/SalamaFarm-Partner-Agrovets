@@ -21,7 +21,12 @@ class Product(BaseStoreOwnedModel):
     stock = models.PositiveIntegerField(default=0)
     expiry = models.DateField(null=True, blank=True)
     image_emoji = models.CharField(max_length=8, blank=True, default="📦")
-    image = models.ImageField(upload_to="products/", blank=True, null=True)
+    image = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Public HTTPS URL of the product photo (stored in R2 or CDN).",
+    )
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

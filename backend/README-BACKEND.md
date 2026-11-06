@@ -26,6 +26,15 @@ python manage.py migrate
 python manage.py runserver
 ```
 
+### Windows troubleshooting
+
+- Use **Python 3.12+** in a project venv (see Requirements). If `py -3.12` reports no runtime, install 3.12 from [python.org](https://www.python.org/downloads/) or point `python` at that install when creating `.venv`.
+- If `manage.py` raises **`Error loading psycopg2 or psycopg module`** and `.env` sets **`DATABASE_URL`** to PostgreSQL, either install a matching PostgreSQL/libpq stack so **`psycopg2-binary`** can load its DLLs, or set **`DATABASE_URL=sqlite:///db.sqlite3`** for local dev/tests.
+
+### Cloudflare R2
+
+Fill **`R2_*`** in `.env` when you use vendor portal image uploads (`POST /api/upload-url/`). **`migrate` and `runserver` do not require R2**; without it, that endpoint returns **503** with a clear message.
+
 API runs at [http://127.0.0.1:8000/](http://127.0.0.1:8000/). Admin: `/admin/` (create a superuser with `createsuperuser` when ready).
 
 ## Settings

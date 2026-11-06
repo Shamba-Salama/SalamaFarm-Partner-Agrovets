@@ -32,15 +32,14 @@ class ProductSerializer(serializers.ModelSerializer):
         }
 
     def validate_image(self, value):
-        if value is None or value == "":
+        if value is None or (isinstance(value, str) and not value.strip()):
             return None
-        content_type = getattr(value, "content_type", "") or ""
-        if content_type and content_type not in ("image/jpeg", "image/png", "image/jpg"):
-            raise serializers.ValidationError("Only JPG or PNG images are allowed.")
-        # ~5 MB cap for mobile marketplace photos
-        if getattr(value, "size", 0) > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Image must be 5 MB or smaller.")
-        return value
+        if not isinstance(value, str):
+            raise serializers.ValidationError("Image must be a URL string.")
+        url = value.strip()
+        if not url.startswith(("http://", "https://")):
+            raise serializers.ValidationError("Image URL must start with http:// or https://.")
+        return url
 
 
 class PublicStoreSerializer(serializers.ModelSerializer):

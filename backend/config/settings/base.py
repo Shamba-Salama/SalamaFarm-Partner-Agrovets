@@ -146,3 +146,10 @@ AFRICASTALKING_SENDER_ID = env("AFRICASTALKING_SENDER_ID", default="")
 OTP_DEV_MODE = env.bool("OTP_DEV_MODE", default=False)
 OTP_TTL_SECONDS = env.int("OTP_TTL_SECONDS", default=300)  # 5 min
 OTP_MAX_ATTEMPTS = env.int("OTP_MAX_ATTEMPTS", default=5)
+
+# Cloudflare R2 (S3 API) — required only for POST /api/upload-url/ (see core.r2_client).
+R2_ACCOUNT_ID = env("R2_ACCOUNT_ID", default="")
+R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
+R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
+R2_BUCKET = env("R2_BUCKET", default="")
+R2_PUBLIC_URL = env("R2_PUBLIC_URL", default="").rstrip("/")
