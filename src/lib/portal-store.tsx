@@ -22,9 +22,13 @@ import {
   deleteProductApi,
   fetchProducts,
   importProductsCsv,
+  publishProduct as publishProductApi,
+  archiveProduct as archiveProductApi,
   toggleProductActive,
+  unpublishProduct as unpublishProductApi,
   updateProduct as updateProductApi,
   type ProductWriteBody,
+  type ProductPublicationStatus,
 } from "@/lib/catalog-api";
 import {
   apiCustomerToCustomer,
@@ -82,6 +86,7 @@ export type Product = {
   image: string;
   imageUrl?: string | null;
   active: boolean;
+  status: ProductPublicationStatus;
 };
 
 export type FollowUpStatus = "Pending" | "Contacted" | "Satisfied";
@@ -237,6 +242,9 @@ type Ctx = {
   updateProductEntry: (id: string, draft: ProductWriteBody) => Promise<Product>;
   removeProduct: (id: string) => Promise<void>;
   toggleProduct: (id: string) => Promise<Product>;
+  publishProduct: (id: string) => Promise<Product>;
+  unpublishProduct: (id: string) => Promise<Product>;
+  archiveProduct: (id: string) => Promise<Product>;
   importProductsCsvFile: (file: File) => Promise<{ created: number }>;
   resetProducts: () => void;
   orders: CustomerOrder[];
@@ -541,6 +549,41 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       }
     },
     [mapProduct, refreshProducts],
+  );
+
+  const updateProductPublication = useCallback(
+    async (
+      id: string,
+      update: (productId: string) => Promise<Awaited<ReturnType<typeof publishProductApi>>>,
+    ) => {
+      try {
+        const updated = mapProduct(apiProductToProduct(await update(id)));
+        setProducts((prev) => prev.map((product) => (product.id === id ? updated : product)));
+        return updated;
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          await refreshProducts();
+          throw new ApiError("This product no longer exists.", 404, err.body);
+        }
+        throw err;
+      }
+    },
+    [mapProduct, refreshProducts],
+  );
+
+  const publishProduct = useCallback(
+    (id: string) => updateProductPublication(id, publishProductApi),
+    [updateProductPublication],
+  );
+
+  const unpublishProduct = useCallback(
+    (id: string) => updateProductPublication(id, unpublishProductApi),
+    [updateProductPublication],
+  );
+
+  const archiveProduct = useCallback(
+    (id: string) => updateProductPublication(id, archiveProductApi),
+    [updateProductPublication],
   );
 
   const importProductsCsvFile = useCallback(
@@ -1034,6 +1077,9 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       updateProductEntry,
       removeProduct,
       toggleProduct,
+      publishProduct,
+      unpublishProduct,
+      archiveProduct,
       importProductsCsvFile,
       resetProducts,
       orders,
@@ -1097,6 +1143,9 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       updateProductEntry,
       removeProduct,
       toggleProduct,
+      publishProduct,
+      unpublishProduct,
+      archiveProduct,
       importProductsCsvFile,
       resetProducts,
       orders,

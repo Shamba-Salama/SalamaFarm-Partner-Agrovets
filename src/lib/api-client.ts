@@ -1,20 +1,26 @@
+import { ApiError, messageFromUnknown } from "./api-error";
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "./auth-storage";
+import { demoApiRequest, isSupabaseBackendEnabled } from "./supabase-demo";
 
-const DEFAULT_BASE = "http://127.0.0.1:8000/api/v1";
+export { ApiError } from "./api-error";
+
+// Prefer env. Fallback: same-origin /api (Vite/Nitro proxy) so local/dev avoids CORS.
+// const DEFAULT_BASE = "https://api.salamafarm.com/api/v1";
+// const DEFAULT_BASE = "http://34.255.196.223:8000/api/v1";
+const DEFAULT_BASE = "/api/v1";
 
 export function getApiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || DEFAULT_BASE;
 }
 
-export class ApiError extends Error {
-  status: number;
-  body: unknown;
-
-  constructor(message: string, status: number, body: unknown) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.body = body;
+let loggedBackend = false;
+function logBackendOnce() {
+  if (loggedBackend || typeof console === "undefined") return;
+  loggedBackend = true;
+  if (isSupabaseBackendEnabled()) {
+    console.info("[api] Using the Supabase backend.");
+  } else {
+    console.info(`[api] Using Django at ${getApiBaseUrl()} (VITE_USE_SUPABASE=false).`);
   }
 }
 
@@ -80,7 +86,96 @@ async function tryRefreshAccessToken(): Promise<boolean> {
   return refreshInFlight;
 }
 
+async function supabaseApiRequest<T>(path: string, options: RequestOptions): Promise<T> {
+  const {
+    supabaseRegister,
+    supabaseLogin,
+    supabaseGetMe,
+    supabaseGetStore,
+    supabasePatchStore,
+    supabaseGetProducts,
+    supabaseCreateProduct,
+    supabaseGetOrders,
+    supabaseGetThreads,
+    supabaseLogout,
+    supabaseRequestPasswordReset,
+    supabaseEstablishRecoverySession,
+    supabaseCompletePasswordReset,
+  } = await import("./supabase-adapter");
+
+  const method = (options.method ?? "GET").toUpperCase();
+  const body = options.body;
+
+  if (path === "/auth/register/" && method === "POST") {
+    return (await supabaseRegister(body as {
+      email: string;
+      password: string;
+      phone?: string;
+      store?: {
+        name?: string;
+        town?: string;
+        county?: string;
+        till?: string;
+        attendant_phone?: string;
+      };
+    })) as T;
+  }
+  if (path === "/auth/token/" && method === "POST") {
+    const payload = typeof body === "string" ? JSON.parse(body) : body;
+    return (await supabaseLogin(payload.email, payload.password)) as T;
+  }
+  if (path === "/auth/me/" && method === "GET") {
+    return (await supabaseGetMe()) as T;
+  }
+  if (path === "/auth/logout/" && method === "POST") {
+    await supabaseLogout();
+    return { ok: true } as T;
+  }
+  if (path === "/auth/forgot-password/" && method === "POST") {
+    const payload = typeof body === "string" ? JSON.parse(body) : body;
+    return (await supabaseRequestPasswordReset(String(payload?.email ?? ""))) as T;
+  }
+  if (path === "/auth/recover-session/" && method === "POST") {
+    return (await supabaseEstablishRecoverySession()) as T;
+  }
+  if (path === "/auth/reset-password/" && method === "POST") {
+    const payload = typeof body === "string" ? JSON.parse(body) : body;
+    return (await supabaseCompletePasswordReset(String(payload?.password ?? ""))) as T;
+  }
+  if (path === "/store/" && method === "GET") {
+    return (await supabaseGetStore()) as T;
+  }
+  if (path === "/store/" && method === "PATCH") {
+    return (await supabasePatchStore((body ?? {}) as Record<string, unknown>)) as T;
+  }
+  if (path === "/products/" && method === "GET") {
+    return (await supabaseGetProducts()) as T;
+  }
+  if (path === "/products/" && method === "POST") {
+    const payload = typeof body === "string" ? JSON.parse(body) : body;
+    return (await supabaseCreateProduct(payload as Record<string, unknown>)) as T;
+  }
+  if (path === "/orders/" && method === "GET") {
+    return (await supabaseGetOrders()) as T;
+  }
+  if (path === "/threads/" && method === "GET") {
+    return (await supabaseGetThreads()) as T;
+  }
+
+  return (await demoApiRequest(path, options)) as T;
+}
+
 export async function apiRequest<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  logBackendOnce();
+  if (isSupabaseBackendEnabled()) {
+    try {
+      return await supabaseApiRequest<T>(path, options);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(messageFromUnknown(error) || "Backend request failed.", 500, error);
+    }
+  }
+
   const { method = "GET", body, auth = true, headers = {}, skipRefresh = false } = options;
   const url = path.startsWith("http") ? path : `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 
@@ -104,7 +199,16 @@ export async function apiRequest<T = unknown>(path: string, options: RequestOpti
     if (token) reqHeaders.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(url, { method, headers: reqHeaders, body: payload });
+  let res: Response;
+  try {
+    res = await fetch(url, { method, headers: reqHeaders, body: payload });
+  } catch (error) {
+    throw new ApiError(
+      `Could not reach API at ${url}: ${messageFromUnknown(error) || "network error"}`,
+      0,
+      error,
+    );
+  }
 
   if (res.status === 401 && auth && !skipRefresh) {
     const refreshed = await tryRefreshAccessToken();

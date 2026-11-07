@@ -8,12 +8,23 @@ from core.models import BaseStoreOwnedModel
 class Product(BaseStoreOwnedModel):
     """Shelf item for an agrovet store."""
 
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING = "pending", "Pending review"
+        PUBLISHED = "published", "Published"
+        ARCHIVED = "archived", "Archived"
+
     class Category(models.TextChoices):
         FERTILIZER = "Fertilizer", "Fertilizer"
         SEEDS = "Seeds", "Seeds"
         VET_SUPPLIES = "Vet Supplies", "Vet Supplies"
         PESTICIDES = "Pesticides", "Pesticides"
 
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
     name = models.CharField(max_length=160)
     category = models.CharField(max_length=32, choices=Category.choices)
     description = models.TextField(blank=True)

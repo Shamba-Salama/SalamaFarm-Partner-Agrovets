@@ -181,26 +181,29 @@ function OrdersPage() {
       title="Sales, Orders & M-Pesa Log"
       subtitle={`${orders.length} recorded transactions`}
       actions={
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             size="sm"
             variant="outline"
+            className="shrink-0"
             disabled={refreshingPayments}
             onClick={() => void onRefreshPayments()}
           >
-            <RefreshCw className={cn("mr-1.5 h-4 w-4", refreshingPayments && "animate-spin")} />
-            Refresh payment status
+            <RefreshCw className={cn("h-4 w-4 sm:mr-1.5", refreshingPayments && "animate-spin")} />
+            <span className="hidden sm:inline">Refresh payment status</span>
+            <span className="sm:hidden">Refresh</span>
           </Button>
-          <Button size="sm" variant="ghost" onClick={clearNewOrders}>
-            Mark orders seen
+          <Button size="sm" variant="ghost" className="shrink-0" onClick={clearNewOrders}>
+            <span className="hidden sm:inline">Mark orders seen</span>
+            <span className="sm:hidden">Seen</span>
           </Button>
         </div>
       }
     >
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[220px] flex-1 space-y-1.5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="min-w-0 w-full flex-1 space-y-1.5 sm:min-w-[220px]">
               <label className="text-xs font-semibold text-muted-foreground">
                 Verify M-Pesa confirmation code before releasing goods
               </label>
@@ -217,13 +220,13 @@ function OrdersPage() {
             {verify.trim() && (
               <div
                 className={cn(
-                  "min-w-[240px] flex-1 rounded-xl p-3 text-sm",
+                  "w-full min-w-0 flex-1 rounded-xl p-3 text-sm sm:min-w-[240px]",
                   match ? "bg-success/12 text-success" : "bg-destructive/12 text-destructive",
                 )}
               >
                 {match ? (
                   <>
-                    <p className="font-semibold">✅ Valid payment found</p>
+                    <p className="font-semibold">Valid payment found</p>
                     <p className="text-foreground">
                       {match.customer} · {formatKES(match.amount)} · {match.product}
                     </p>

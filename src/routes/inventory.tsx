@@ -1,6 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpDown, ImagePlus, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import {
+  Archive,
+  ArrowUpDown,
+  ImagePlus,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { PortalLayout } from "@/components/portal/PortalLayout";
@@ -110,6 +119,9 @@ function InventoryPage() {
     updateProductEntry,
     removeProduct,
     toggleProduct,
+    publishProduct,
+    unpublishProduct,
+    archiveProduct,
   } = usePortal();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<"all" | Category>("all");
@@ -141,6 +153,27 @@ function InventoryPage() {
       toast.error(
         err instanceof ApiError ? formatApiError(err) : "Could not update product status.",
       );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onPublicationAction = async (p: Product, action: "publish" | "unpublish" | "archive") => {
+    if (busyId) return;
+    setBusyId(p.id);
+    try {
+      if (action === "publish") {
+        await publishProduct(p.id);
+        toast.success(`${p.name} submitted for admin review`);
+      } else if (action === "unpublish") {
+        await unpublishProduct(p.id);
+        toast.success(`${p.name} moved to drafts`);
+      } else {
+        await archiveProduct(p.id);
+        toast.success(`${p.name} archived`);
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? formatApiError(err) : `Could not ${action} product.`);
     } finally {
       setBusyId(null);
     }
@@ -184,11 +217,18 @@ function InventoryPage() {
       subtitle={`${products.length} products in your catalogue`}
       actions={
         <>
-          <Button size="sm" variant="outline" onClick={() => setCsvOpen(true)}>
-            <Upload className="mr-1.5 h-4 w-4" /> Import CSV
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => setCsvOpen(true)}>
+            <Upload className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Import CSV</span>
           </Button>
-          <Button size="sm" onClick={() => setDrawer({ mode: "create", draft: emptyDraft() })}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add Product
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => setDrawer({ mode: "create", draft: emptyDraft() })}
+          >
+            <Plus className="h-4 w-4 sm:mr-1.5" />
+            <span className="sm:hidden">Add</span>
+            <span className="hidden sm:inline">Add Product</span>
           </Button>
         </>
       }
@@ -233,34 +273,37 @@ function InventoryPage() {
                   <TableHead className="text-right">Stock</TableHead>
                   <TableHead className="text-right">Price</TableHead>
                   <TableHead>Expiry</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>Stock status</TableHead>
+                  <TableHead>Publication</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {productsLoading && products.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       Loading products…
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 && products.length === 0 && !filtersActive ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       No products yet — add your first product or import a CSV
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                       No products match your filters.
                     </TableCell>
                   </TableRow>
                 ) : (
                   rows.map((p) => {
-                    const status = stockStatus(p);
+                    const stockState = stockStatus(p);
                     const danger =
-                      status === "Low Stock" || status === "Expired" || status === "Clearance";
+                      stockState === "Low Stock" ||
+                      stockState === "Expired" ||
+                      stockState === "Clearance";
                     const days = daysUntil(p.expiry);
                     const rowBusy = busyId === p.id;
                     return (
@@ -268,11 +311,7 @@ function InventoryPage() {
                         <TableCell>
                           <span className="grid h-10 w-10 place-items-center overflow-hidden rounded-lg bg-muted text-lg">
                             {p.imageUrl ? (
-                              <img
-                                src={p.imageUrl}
-                                alt=""
-                                className="h-full w-full object-cover"
-                              />
+                              <img src={p.imageUrl} alt="" className="h-full w-full object-cover" />
                             ) : (
                               p.image
                             )}
@@ -302,15 +341,64 @@ function InventoryPage() {
                           <Badge
                             className={cn(
                               "border-transparent",
-                              status === "In Stock" && "bg-success text-success-foreground",
-                              status === "Clearance" && "bg-warning text-warning-foreground",
+                              stockState === "In Stock" && "bg-success text-success-foreground",
+                              stockState === "Clearance" && "bg-warning text-warning-foreground",
                               danger &&
-                                status !== "Clearance" &&
+                                stockState !== "Clearance" &&
                                 "bg-destructive text-destructive-foreground",
                             )}
                           >
-                            {status === "Clearance" ? "Clearance Candidate" : status}
+                            {stockState === "Clearance" ? "Clearance Candidate" : stockState}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Badge
+                              variant={
+                                p.status === "published"
+                                  ? "default"
+                                  : p.status === "pending"
+                                    ? "secondary"
+                                    : "outline"
+                              }
+                            >
+                              {p.status === "pending"
+                                ? "Pending review"
+                                : p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                            </Badge>
+                            {p.status === "draft" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={rowBusy}
+                                onClick={() => void onPublicationAction(p, "publish")}
+                              >
+                                Submit for review
+                              </Button>
+                            )}
+                            {(p.status === "published" || p.status === "pending") && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={rowBusy}
+                                onClick={() => void onPublicationAction(p, "unpublish")}
+                              >
+                                {p.status === "pending" ? "Withdraw" : "Unpublish"}
+                              </Button>
+                            )}
+                            {p.status !== "archived" && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                disabled={rowBusy}
+                                onClick={() => void onPublicationAction(p, "archive")}
+                                aria-label={`Archive ${p.name}`}
+                                title="Archive product"
+                              >
+                                <Archive className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1.5">

@@ -82,11 +82,20 @@ Environment variables are loaded from `.env` via **django-environ** (see `.env.e
 
 | Method | Path | Auth |
 |--------|------|------|
-| GET | `/api/v1/products/` | JWT — filters: `category`, `active`, `search` |
-| POST | `/api/v1/products/` | JWT — `store` set from user, never body |
+| GET | `/api/v1/products/` | JWT — filters: `category`, `active`, `search`; includes publication `status` |
+| POST | `/api/v1/products/` | JWT — creates a `draft`; `store` set from user, never body |
 | GET/PATCH/DELETE | `/api/v1/products/{id}/` | JWT — cross-store ids → 404 |
 | POST | `/api/v1/products/{id}/toggle/` | JWT — flip `active` |
+| POST | `/api/v1/products/{id}/publish/` | JWT — submit draft for admin review (`pending`) |
+| POST | `/api/v1/products/{id}/unpublish/` | JWT — return pending/published product to `draft` |
+| POST | `/api/v1/products/{id}/archive/` | JWT — remove from publication workflow (`archived`) |
 | POST | `/api/v1/products/import/` | JWT — multipart `file` CSV |
+
+Publication statuses are `draft`, `pending`, `published`, and `archived`. Admins review
+pending products in Django Admin by changing their status to `published`. The public
+`GET /api/v1/marketplace/products/` endpoint returns only published products that are
+also active and belong to open stores. Existing products are migrated as published so
+they remain visible after the migration; new products and CSV imports start as drafts.
 
 ## CRM API (`/api/v1/`)
 

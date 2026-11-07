@@ -188,7 +188,7 @@ function SettingsPage() {
             <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
               Verification status:{" "}
               <span className="font-semibold text-foreground">
-                {profile.onboarded ? "Verified Merchant ✅" : "Pending Verification ⏳"}
+                {profile.onboarded ? "Verified Merchant" : "Pending Verification"}
               </span>
               . License upload is not wired to the API yet (see below).
             </div>

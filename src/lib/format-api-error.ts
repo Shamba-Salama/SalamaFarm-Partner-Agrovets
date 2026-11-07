@@ -1,9 +1,20 @@
-import { ApiError } from "@/lib/api-client";
+import { ApiError, messageFromUnknown } from "@/lib/api-error";
 
-/** Flatten DRF error payloads for toast copy. */
+/** Flatten DRF / Supabase / network error payloads for toast copy. */
 export function formatApiError(err: unknown, fallback = "Request failed"): string {
   if (!(err instanceof ApiError)) {
-    return err instanceof Error ? err.message : fallback;
+    return messageFromUnknown(err) || fallback;
+  }
+
+  const nested = messageFromUnknown(err.body);
+  if (nested && nested !== err.message) {
+    // Prefer the underlying backend message when the wrapper is generic.
+    const generic =
+      !err.message ||
+      /^(request failed|backend request failed\.?|registration failed|login failed)$/i.test(
+        err.message,
+      );
+    if (generic) return nested;
   }
 
   const body = err.body;
@@ -15,6 +26,7 @@ export function formatApiError(err: unknown, fallback = "Request failed"): strin
 
     const bits: string[] = [];
     for (const [key, value] of Object.entries(record)) {
+      if (key === "message" || key === "name" || key === "stack") continue;
       if (key === "store" && value && typeof value === "object") {
         for (const [sk, sv] of Object.entries(value as Record<string, unknown>)) {
           bits.push(`${sk}: ${Array.isArray(sv) ? sv.join(" ") : String(sv)}`);
@@ -27,5 +39,5 @@ export function formatApiError(err: unknown, fallback = "Request failed"): strin
     if (bits.length) return bits.join(" · ");
   }
 
-  return err.message || fallback;
+  return nested || err.message || fallback;
 }

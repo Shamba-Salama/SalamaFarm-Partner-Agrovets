@@ -3,14 +3,28 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import include, path
 
 from payments.urls import webhook_urlpatterns
 from visits.views import AppVisitsAnalyticsView
 from core.health import health, ready, root
 
+
+def api_root(_request):
+    return JsonResponse(
+        {
+            "ok": True,
+            "service": "SalamaFarm Partner Agrovets API",
+            "api": "/api/v1/",
+            "admin": "/admin/",
+        }
+    )
+
+
 urlpatterns = [
     path("", root, name="root"),
+    path("api/v1/", api_root, name="api-v1-root"),
     path("admin/", admin.site.urls),
     path("api/v1/auth/", include("accounts.urls")),
     path("api/v1/customer-auth/", include("customers.urls")),
