@@ -1,20 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowUpDown, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
-=======
-import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
   ArrowUpDown,
-  ImagePlus,
   Pencil,
   Plus,
   Search,
   Trash2,
   Upload,
 } from "lucide-react";
->>>>>>> 4ad3290f16a1e6d8714e9a69c6e0b56ece5f8620
 import { toast } from "sonner";
 
 import { PortalLayout } from "@/components/portal/PortalLayout";

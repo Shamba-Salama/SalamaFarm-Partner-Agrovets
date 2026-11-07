@@ -18,19 +18,35 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-<<<<<<< HEAD
   // Do not set ssr.optimizeDeps.include for @tanstack/* — pre-bundling can resolve a second
   // copy of react and break SSR with "Invalid hook call" / useContext on null.
-=======
   // Local browser → /api/** → API server (no CORS). Vercel build uses Nitro proxy the same way.
   vite: {
     server: {
+      // Lovable defaults to host `::`; on Windows, HMR WebSockets often fail when the tab uses localhost.
+      host: "127.0.0.1",
+      strictPort: true,
+      hmr: {
+        host: "127.0.0.1",
+        port: 8080,
+        clientPort: 8080,
+      },
       proxy: {
         "/api": {
           target: djangoOrigin,
           changeOrigin: true,
           secure: true,
         },
+      },
+    },
+    ssr: {
+      resolve: {
+        dedupe: [
+          "react",
+          "react-dom",
+          "react/jsx-runtime",
+          "react/jsx-dev-runtime",
+        ],
       },
     },
   },
@@ -45,5 +61,4 @@ export default defineConfig({
         },
       }
     : {},
->>>>>>> 4ad3290f16a1e6d8714e9a69c6e0b56ece5f8620
 });
