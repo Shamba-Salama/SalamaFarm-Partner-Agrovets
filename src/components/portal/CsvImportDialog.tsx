@@ -61,6 +61,7 @@ function parseCsvPreview(text: string): Product[] {
       expiry: expiryRaw || null,
       image: "📦",
       active: true,
+      status: "draft",
     } satisfies Product;
   });
 }

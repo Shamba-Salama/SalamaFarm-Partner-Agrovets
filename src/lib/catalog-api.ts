@@ -1,8 +1,12 @@
 import { api } from "@/lib/api-client";
 
+export type ProductPublicationStatus = "draft" | "pending" | "published" | "archived";
+
 /** Response shape from catalog product endpoints. */
 export type ApiProduct = {
   id: number;
+  /** Optional for compatibility with older API responses. */
+  status?: ProductPublicationStatus;
   name: string;
   category: string;
   description: string;
@@ -46,6 +50,7 @@ export type CsvImportResult = {
 export function apiProductToProduct(p: ApiProduct) {
   return {
     id: String(p.id),
+    status: p.status ?? "published",
     name: p.name ?? "",
     category: p.category,
     description: p.description ?? "",
@@ -109,6 +114,18 @@ export async function deleteProductApi(id: string | number): Promise<void> {
 
 export async function toggleProductActive(id: string | number): Promise<ApiProduct> {
   return api.post<ApiProduct>(`/products/${id}/toggle/`);
+}
+
+export async function publishProduct(id: string | number): Promise<ApiProduct> {
+  return api.post<ApiProduct>(`/products/${id}/publish/`);
+}
+
+export async function unpublishProduct(id: string | number): Promise<ApiProduct> {
+  return api.post<ApiProduct>(`/products/${id}/unpublish/`);
+}
+
+export async function archiveProduct(id: string | number): Promise<ApiProduct> {
+  return api.post<ApiProduct>(`/products/${id}/archive/`);
 }
 
 export async function importProductsCsv(file: File): Promise<CsvImportResult> {

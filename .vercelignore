@@ -1,0 +1,10 @@
+backend
+backend/**
+docker-compose.yml
+docker-compose.override.yml
+Dockerfile
+Dockerfile.dev
+nginx.conf
+README.md
+.github
+scripts

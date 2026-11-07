@@ -94,7 +94,7 @@ function DashboardPage() {
 
   return (
     <PortalLayout title="Dashboard Overview" subtitle={subtitle}>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 sm:gap-4">
         <Metric
           icon={TrendingUp}
           label="Total revenue"
@@ -127,7 +127,7 @@ function DashboardPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Weekly sales by category</CardTitle>
           </CardHeader>
-          <CardContent className="h-72 pl-0">
+          <CardContent className="h-56 min-w-0 overflow-x-auto pl-0 sm:h-72">
             {chartsBusy ? (
               <p className="grid h-full place-items-center text-sm text-muted-foreground">
                 Loading weekly sales…
@@ -137,11 +137,11 @@ function DashboardPage() {
                 No sales recorded yet
               </p>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartRows}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={280}>
+                <BarChart data={chartRows} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
-                  <XAxis dataKey="week" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
+                  <XAxis dataKey="week" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={10} tickLine={false} axisLine={false} width={44} />
                   <Tooltip formatter={(v: number) => formatKES(v)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar
@@ -168,7 +168,7 @@ function DashboardPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Revenue trend</CardTitle>
           </CardHeader>
-          <CardContent className="h-72 pl-0">
+          <CardContent className="h-56 min-w-0 overflow-x-auto pl-0 sm:h-72">
             {chartsBusy ? (
               <p className="grid h-full place-items-center text-sm text-muted-foreground">
                 Loading…
@@ -178,11 +178,11 @@ function DashboardPage() {
                 No sales recorded yet
               </p>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trend}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={280}>
+                <LineChart data={trend} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
-                  <XAxis dataKey="week" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={11} tickLine={false} axisLine={false} width={54} />
+                  <XAxis dataKey="week" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={10} tickLine={false} axisLine={false} width={44} />
                   <Tooltip formatter={(v: number) => formatKES(v)} />
                   <Line
                     type="monotone"
@@ -207,8 +207,8 @@ function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             {alerts.slice(0, 5).map((p) => (
-              <div key={p.id} className="flex items-center gap-3 rounded-lg bg-muted/50 p-2.5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-card text-lg">
+              <div key={p.id} className="flex items-center gap-3 rounded-md border border-border p-2.5">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-muted text-lg">
                   {p.image}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -243,7 +243,7 @@ function DashboardPage() {
             {orders.slice(0, 5).map((o) => (
               <div
                 key={o.id}
-                className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 p-2.5"
+                className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2.5"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{o.customer}</span>
@@ -281,7 +281,7 @@ function Metric({
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-muted-foreground">{label}</span>
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary-soft text-primary">
+          <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-muted text-muted-foreground">
             <Icon className="h-4 w-4" />
           </span>
         </div>

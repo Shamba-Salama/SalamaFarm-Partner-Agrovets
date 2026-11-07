@@ -59,6 +59,44 @@ class ProductViewSet(viewsets.ModelViewSet):
         # store must never be reassigned from the body
         serializer.save(store=self.get_store())
 
+    @action(detail=True, methods=["post"])
+    def publish(self, request, pk=None):
+        product = self.get_object()
+        if product.status == Product.Status.ARCHIVED:
+            return Response(
+                {"detail": "Archived products cannot be submitted for publication."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if product.status == Product.Status.PUBLISHED:
+            return Response(
+                {"detail": "This product is already published."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if product.status != Product.Status.PENDING:
+            product.status = Product.Status.PENDING
+            product.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(product).data)
+
+    @action(detail=True, methods=["post"])
+    def unpublish(self, request, pk=None):
+        product = self.get_object()
+        if product.status not in (Product.Status.PENDING, Product.Status.PUBLISHED):
+            return Response(
+                {"detail": "Only pending or published products can be unpublished."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        product.status = Product.Status.DRAFT
+        product.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(product).data)
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        product = self.get_object()
+        if product.status != Product.Status.ARCHIVED:
+            product.status = Product.Status.ARCHIVED
+            product.save(update_fields=["status", "updated_at"])
+        return Response(self.get_serializer(product).data)
+
     @action(detail=True, methods=["post"], url_path="toggle")
     def toggle(self, request, pk=None):
         product = self.get_object()
@@ -128,7 +166,11 @@ class MarketplaceProductViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         qs = (
-            Product.objects.filter(active=True, store__open=True)
+            Product.objects.filter(
+                status=Product.Status.PUBLISHED,
+                active=True,
+                store__open=True,
+            )
             .select_related("store")
             .order_by("name", "id")
         )

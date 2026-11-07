@@ -16,7 +16,7 @@ dist-ssr
 .nitro
 *.local
 
-# Frontend env (keep .env.example)
+# Frontend env (keep .env.example tracked as the template)
 .env
 .env.*.local
 
@@ -43,4 +43,5 @@ backend/**/*.py[cod]
 *.njsproj
 *.sln
 *.sw?
-node_modules
+.vercel/output
+.vercel

@@ -12,6 +12,7 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = (
             "id",
+            "status",
             "name",
             "category",
             "description",
@@ -24,12 +25,19 @@ class ProductSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "created_at", "updated_at")
+        read_only_fields = ("id", "status", "created_at", "updated_at")
         # store is never accepted from the client — set in the viewset
         extra_kwargs = {
             "image": {"required": False, "allow_null": True},
             "image_emoji": {"required": False, "allow_blank": True},
         }
+
+    def to_internal_value(self, data):
+        if "status" in data:
+            raise serializers.ValidationError(
+                {"status": "Use the product publication actions to change status."}
+            )
+        return super().to_internal_value(data)
 
     def validate_image(self, value):
         if value is None or (isinstance(value, str) and not value.strip()):
