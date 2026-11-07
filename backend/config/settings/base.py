@@ -4,6 +4,7 @@ Shared Django settings for SalamaFarm Partner Agrovets API.
 
 from datetime import timedelta
 from pathlib import Path
+import os
 
 import environ
 
@@ -44,6 +45,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -79,6 +81,14 @@ DATABASES = {
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
     )
 }
+# django-environ treats DATABASE_URL="" as postgres://localhost — override that.
+if not os.environ.get("DATABASE_URL", "").strip():
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -114,6 +124,10 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "otp-request": env("OTP_REQUEST_THROTTLE", default="5/hour"),
         "otp-verify": env("OTP_VERIFY_THROTTLE", default="10/hour"),
+        "customer-login": env("CUSTOMER_LOGIN_THROTTLE", default="20/hour"),
+        "customer-register": env("CUSTOMER_REGISTER_THROTTLE", default="10/hour"),
+        "customer-google": env("CUSTOMER_GOOGLE_THROTTLE", default="30/hour"),
+        "customer-password-reset": env("CUSTOMER_PASSWORD_RESET_THROTTLE", default="10/hour"),
     },
 }
 
@@ -153,3 +167,18 @@ R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
 R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
 R2_BUCKET = env("R2_BUCKET", default="")
 R2_PUBLIC_URL = env("R2_PUBLIC_URL", default="").rstrip("/")
+PASSWORD_RESET_TTL_SECONDS = env.int("PASSWORD_RESET_TTL_SECONDS", default=900)  # 15 min
+PASSWORD_RESET_DEV_MODE = env.bool("PASSWORD_RESET_DEV_MODE", default=True)
+
+# Comma-separated OAuth client IDs (Android, iOS, Web) accepted as Google ID token audience.
+GOOGLE_OAUTH_CLIENT_IDS = [
+    part.strip()
+    for part in env("GOOGLE_OAUTH_CLIENT_IDS", default="").split(",")
+    if part.strip()
+]
+
+# Org bootstrap accounts (used by seed_org_customer_accounts; passwords via env only)
+ORG_SUPERADMIN_EMAIL = env("ORG_SUPERADMIN_EMAIL", default="info@salamafarm.com")
+ORG_SUPERADMIN_PASSWORD = env("ORG_SUPERADMIN_PASSWORD", default="")
+ORG_DEVELOPER_EMAIL = env("ORG_DEVELOPER_EMAIL", default="technicalofficer@salamafarm.com")
+ORG_DEVELOPER_PASSWORD = env("ORG_DEVELOPER_PASSWORD", default="")

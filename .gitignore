@@ -43,3 +43,4 @@ backend/**/*.py[cod]
 *.njsproj
 *.sln
 *.sw?
+node_modules

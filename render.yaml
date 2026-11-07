@@ -1,0 +1,35 @@
+# Render Blueprint — Django API (repo-root Dockerfile now builds backend/).
+# Existing services that used the default Dockerfile Path will pick this up
+# on the next deploy without a dashboard change.
+
+# Free Postgres persists across web-service redeploys (unlike ephemeral sqlite).
+# Free DBs expire after 30 days unless upgraded — export/upgrade before then.
+databases:
+  - name: salamafarm-db
+    plan: free
+    databaseName: salamafarm
+    user: salamafarm
+
+services:
+  - type: web
+    name: salamafarm-partner-agrovets
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: salamafarm-db
+          property: connectionString
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpDown, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +48,9 @@ import { ApiError } from "@/lib/api-client";
 import { formatApiError } from "@/lib/format-api-error";
 import { CsvImportDialog } from "@/components/portal/CsvImportDialog";
 import { ImageUploader } from "@/components/portal/ImageUploader";
+import { ProductGalleryPicker } from "@/components/portal/ProductGalleryPicker";
+import { galleryItemToFile, type GalleryItem } from "@/lib/product-gallery";
+import { uploadImage } from "@/lib/upload-image";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/inventory")({
@@ -373,11 +376,45 @@ function ProductDrawer({
   onSave: (draft: ProductWriteBody) => void;
 }) {
   const [draft, setDraft] = useState<ProductWriteBody | null>(null);
+  const [pickingId, setPickingId] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(state?.draft ?? null);
+    setPickingId(null);
   }, [state]);
 
+  const onPickGallery = useCallback(
+    async (item: GalleryItem) => {
+      if (!draft || saving || pickingId) return;
+      setPickingId(item.id);
+      try {
+        const file = await galleryItemToFile(item);
+        const url = await uploadImage(file);
+        const fillEmpty = !draft.name.trim();
+        setDraft({
+          ...draft,
+          imageUrl: url,
+          imageUrlTouched: true,
+          name: fillEmpty ? item.name : draft.name,
+          category: fillEmpty ? item.category : draft.category,
+          description:
+            fillEmpty || !draft.description.trim() ? item.description : draft.description,
+        });
+        toast.success(`Using ${item.name} photo`);
+      } catch (err) {
+        toast.error(
+          err instanceof ApiError
+            ? formatApiError(err)
+            : err instanceof Error
+              ? err.message
+              : "Could not use gallery photo.",
+        );
+      } finally {
+        setPickingId(null);
+      }
+    },
+    [draft, pickingId, saving],
+  );
   return (
     <Sheet open={!!state} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
@@ -462,6 +499,11 @@ function ProductDrawer({
                 onRemoved={() => setDraft({ ...draft, imageUrl: null, imageUrlTouched: true })}
                 disabled={saving}
               />
+              <ProductGalleryPicker
+                onPick={(item) => void onPickGallery(item)}
+                pickingId={pickingId}
+                disabled={saving}
+              />
             </div>
 
             <SheetFooter className="mt-6 flex-row gap-2">
@@ -471,7 +513,7 @@ function ProductDrawer({
               <Button
                 className="flex-1"
                 onClick={() => onSave(draft)}
-                disabled={!draft.name.trim() || saving}
+                disabled={!draft.name.trim() || saving || pickingId !== null}
               >
                 {saving ? "Saving…" : "Save product"}
               </Button>
