@@ -66,6 +66,10 @@ Admin: `/admin/` (`createsuperuser` when needed)
 
 More detail: [`backend/README-BACKEND.md`](backend/README-BACKEND.md).
 
+## Hostinger VPS operations
+
+The current Django VPS deployment, Nginx routing, health checks, encrypted Google Drive backups, schedule, recovery status, and outstanding operational tasks are documented in [`HOSTINGER_VPS_OPERATIONS.md`](HOSTINGER_VPS_OPERATIONS.md). Keep secrets in server-side environment/configuration files; never commit them.
+
 Default settings: `config.settings.dev`. CORS for local Vite origins (`5173`, `3000`, `8080`) is configured there.
 
 ## Frontend setup

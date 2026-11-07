@@ -1,0 +1,45 @@
+name: Deploy Backend to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+
+            echo "==> Navigating to project directory..."
+            cd /root/SalamaFarm-Partner-Agrovets
+
+            echo "==> Pulling latest changes..."
+            git pull origin main
+
+            echo "==> Rebuilding Docker image from backend folder..."
+            docker build -t salama-partner-api -f backend/Dockerfile backend/
+
+            echo "==> Restarting container..."
+            docker rm -f agrovet_backend || true
+
+            docker run -d \
+              --name agrovet_backend \
+              --restart unless-stopped \
+              -p 127.0.0.1:8000:8000 \
+              --env-file backend/.env \
+              salama-partner-api
+
+            echo "==> Cleaning up unused Docker images..."
+            docker image prune -f
+
+            echo "==> Deployment complete!"

@@ -49,9 +49,6 @@ Thumbs.db
 tmp/
 temp/
 
-# Backend files
-backend/
-
 # Git
 .git/
 .gitignore

@@ -8,6 +8,7 @@ from django.urls import include, path
 
 from payments.urls import webhook_urlpatterns
 from visits.views import AppVisitsAnalyticsView
+from core.health import health, ready, root
 
 
 def api_root(_request):
@@ -22,7 +23,7 @@ def api_root(_request):
 
 
 urlpatterns = [
-    path("", api_root, name="api-root"),
+    path("", root, name="root"),
     path("api/v1/", api_root, name="api-v1-root"),
     path("admin/", admin.site.urls),
     path("api/v1/auth/", include("accounts.urls")),
@@ -40,6 +41,10 @@ urlpatterns = [
         name="app-visits",
     ),
     path("api/", include(webhook_urlpatterns)),
+    # Health endpoints for liveness/readiness probes
+    path("health/", health, name="health"),
+    path("health.json", health, name="health-json"),
+    path("ready/", ready, name="ready"),
 ]
 
 if settings.DEBUG:
