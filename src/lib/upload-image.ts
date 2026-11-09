@@ -171,7 +171,9 @@ function putFileWithProgress(
     xhr.onerror = () => {
       reject(
         new ApiError(
-          "We couldn’t reach the storage server. Check your internet connection and try again.",
+          "The browser could not send the image to storage (often R2 bucket CORS). " +
+            "Ask your admin to run: python manage.py configure_r2_cors — " +
+            "and allow your portal origin in Cloudflare R2 → bucket → CORS.",
           0,
           null,
         ),

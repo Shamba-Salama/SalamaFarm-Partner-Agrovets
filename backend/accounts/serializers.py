@@ -5,6 +5,7 @@ import logging
 from django.db import transaction
 from rest_framework import serializers
 
+from stores.kenya import normalize_kenya_phone, resolve_kenya_county
 from stores.models import AgrovetStore
 from stores.paystack_subaccount import ensure_paystack_subaccount
 
@@ -46,6 +47,22 @@ class RegisterStoreSerializer(serializers.Serializer):
         max_length=20, required=False, allow_blank=True, default=""
     )
 
+    def validate_county(self, value: str) -> str:
+        if not (value or "").strip():
+            raise serializers.ValidationError("County is required.")
+        county = resolve_kenya_county(value)
+        if not county:
+            raise serializers.ValidationError("Choose a valid Kenya county.")
+        return county
+
+    def validate_attendant_phone(self, value: str) -> str:
+        normalized = normalize_kenya_phone(value)
+        if not normalized:
+            raise serializers.ValidationError(
+                "Enter a valid Kenyan mobile number (e.g. 0712345678)."
+            )
+        return normalized
+
 
 class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -58,6 +75,16 @@ class RegisterSerializer(serializers.Serializer):
         if VendorUser.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError("A vendor with this email already exists.")
         return email
+
+    def validate_phone(self, value: str) -> str:
+        if not (value or "").strip():
+            return ""
+        normalized = normalize_kenya_phone(value)
+        if not normalized:
+            raise serializers.ValidationError(
+                "Enter a valid Kenyan mobile number (e.g. 0712345678)."
+            )
+        return normalized
 
     def create(self, validated_data: dict) -> VendorUser:
         store_data = validated_data.pop("store", None) or {}

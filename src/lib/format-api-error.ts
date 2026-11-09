@@ -1,6 +1,6 @@
 import { ApiError, messageFromUnknown } from "@/lib/api-error";
 
-/** Flatten DRF / Supabase / network error payloads for toast copy. */
+/** Flatten DRF / network error payloads for toast copy. */
 export function formatApiError(err: unknown, fallback = "Request failed"): string {
   if (!(err instanceof ApiError)) {
     return messageFromUnknown(err) || fallback;

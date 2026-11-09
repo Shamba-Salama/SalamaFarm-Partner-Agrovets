@@ -37,7 +37,7 @@ USER django
 
 EXPOSE 8000
 
-# Render injects $PORT at runtime. Local Docker still defaults to 8000.
+# Optional $PORT env (defaults to 8000).
 CMD ["sh", "-c", \
      "python manage.py migrate --noinput && \
       python manage.py collectstatic --noinput && \

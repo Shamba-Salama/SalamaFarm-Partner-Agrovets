@@ -4,7 +4,7 @@ Django REST API for the agrovet vendor portal (multi-tenant, JWT, Paystack Kenya
 
 ## Live Hostinger VPS operations
 
-The Django API is currently served from the Hostinger VPS at `https://api-next.salamafarm.com`. See the repository's [`HOSTINGER_VPS_OPERATIONS.md`](../HOSTINGER_VPS_OPERATIONS.md) for the live topology, operational checks, encrypted backups, schedule, and recovery caveats. The Render configuration below is retained as deployment configuration/reference and does not describe the current VPS runtime.
+The Django API is served from the Hostinger VPS at `https://api-next.salamafarm.com`. See [`HOSTINGER_VPS_OPERATIONS.md`](../HOSTINGER_VPS_OPERATIONS.md) for topology, health checks, backups, and recovery.
 
 ## Requirements
 
@@ -38,6 +38,20 @@ python manage.py runserver
 ### Cloudflare R2
 
 Fill **`R2_*`** in `.env` when you use vendor portal image uploads (`POST /api/upload-url/`). **`migrate` and `runserver` do not require R2**; without it, that endpoint returns **503** with a clear message.
+
+**Browser uploads need bucket CORS.** The portal PUTs files directly to `*.r2.cloudflarestorage.com`. If CORS is missing, the console shows *No Access-Control-Allow-Origin*.
+
+1. Set optional **`R2_CORS_ORIGINS`** in `.env` (comma-separated portal URLs), **or** rely on the dev defaults.
+2. Apply CORS on the bucket:
+
+   ```bash
+   python manage.py configure_r2_cors
+   # or: python manage.py configure_r2_cors --origins "http://localhost:8080,https://your-portal.example.com"
+   ```
+
+   Or in **Cloudflare Dashboard** → R2 → your bucket → **Settings** → **CORS policy**, allow **PUT/GET/HEAD** from your portal origin(s), headers `*`.
+
+   Example JSON is in [`core/r2-cors-policy.example.json`](core/r2-cors-policy.example.json).
 
 API runs at [http://127.0.0.1:8000/](http://127.0.0.1:8000/). Admin: `/admin/` (create a superuser with `createsuperuser` when ready).
 
@@ -181,27 +195,6 @@ Activate the venv first (`source .venv/bin/activate`) or call `.venv/bin/python`
 - `AUTH_USER_MODEL = accounts.VendorUser` — email login (`USERNAME_FIELD = email`).
 - Keep `.env` out of git (listed in `backend/.gitignore`).
 
-## Deploying to Render
+## Production deploy
 
-1. Create a new **Web Service** in Render using the repository root. Choose "Docker" as the environment and set the Dockerfile path to `backend/Dockerfile` (or use the provided `render.yaml`).
-
-2. Add the following environment variables / secrets in the Render dashboard (do NOT commit them to the repo):
-	- `SECRET_KEY` — Django secret key
-	- `DATABASE_URL` — Postgres connection (use Render's managed Postgres or an external DB)
-	- `DJANGO_SETTINGS_MODULE=config.settings.prod` (can be set in `render.yaml`)
-	- `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` (for payments)
-	- Any other service credentials (SENTRY_DSN, AWS credentials for media, etc.)
-
-3. If you use Render Postgres, create a managed Postgres instance and set `DATABASE_URL` from the database's connection string.
-
-4. Ensure static/media storage is configured. The Dockerfile runs `collectstatic` into `/app/staticfiles` and the app serves static files via the chosen production settings. For durable media, configure an external storage (S3-compatible) and set related env vars in `config.settings.prod`.
-
-5. Deploy: Render will build the Docker image, run migrations and collectstatic (the `backend/Dockerfile` already runs `manage.py migrate` and `collectstatic` at container start), and start `gunicorn` on port 8000.
-
-6. Post-deploy checks:
-	- Visit the service URL and confirm the API responds.
-	- Confirm webhooks (Paystack) are reachable from Render (set webhook URL in Paystack dashboard).
-
-7. Local testing: to simulate production locally, set `DJANGO_SETTINGS_MODULE=config.settings.prod` and ensure `.env` contains the production-like variables.
-
-If you'd like, I can also add a `Procfile`, Kubernetes manifests, or a Render cron job for periodic tasks.
+Use `backend/Dockerfile` and [`HOSTINGER_VPS_OPERATIONS.md`](../HOSTINGER_VPS_OPERATIONS.md). Set `DJANGO_SETTINGS_MODULE=config.settings.prod`, `DATABASE_URL`, `SECRET_KEY`, CORS/CSRF origins, Paystack keys, and R2 vars (`backend/.env.example`).

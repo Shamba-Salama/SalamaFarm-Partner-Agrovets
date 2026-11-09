@@ -167,6 +167,12 @@ R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
 R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
 R2_BUCKET = env("R2_BUCKET", default="")
 R2_PUBLIC_URL = env("R2_PUBLIC_URL", default="").rstrip("/")
+# Browser origins allowed to PUT to R2 (see manage.py configure_r2_cors). Comma-separated in .env.
+R2_CORS_ORIGINS = [
+    part.strip()
+    for part in env("R2_CORS_ORIGINS", default="").split(",")
+    if part.strip()
+]
 PASSWORD_RESET_TTL_SECONDS = env.int("PASSWORD_RESET_TTL_SECONDS", default=900)  # 15 min
 PASSWORD_RESET_DEV_MODE = env.bool("PASSWORD_RESET_DEV_MODE", default=True)
 
