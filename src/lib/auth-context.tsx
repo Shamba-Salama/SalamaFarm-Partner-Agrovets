@@ -56,7 +56,11 @@ type AuthCtx = {
   login: (email: string, password: string) => Promise<VendorMe>;
   register: (input: RegisterInput) => Promise<VendorMe>;
   requestPasswordReset: (email: string) => Promise<void>;
-  completePasswordReset: (password: string) => Promise<VendorMe | null>;
+  completePasswordReset: (input: {
+    uid: string;
+    token: string;
+    password: string;
+  }) => Promise<VendorMe | null>;
   logout: () => void;
   refreshMe: () => Promise<VendorMe | null>;
 };
@@ -320,9 +324,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const completePasswordReset = useCallback(
-    async (password: string) => {
+    async (input: { uid: string; token: string; password: string }) => {
       try {
-        await api.post("/auth/reset-password/", { password }, { auth: false });
+        await api.post("/auth/reset-password/", input, { auth: false });
         try {
           return await refreshMe();
         } catch {

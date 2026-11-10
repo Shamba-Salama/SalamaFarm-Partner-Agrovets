@@ -128,6 +128,8 @@ REST_FRAMEWORK = {
         "customer-register": env("CUSTOMER_REGISTER_THROTTLE", default="10/hour"),
         "customer-google": env("CUSTOMER_GOOGLE_THROTTLE", default="30/hour"),
         "customer-password-reset": env("CUSTOMER_PASSWORD_RESET_THROTTLE", default="10/hour"),
+        "vendor-login": env("VENDOR_LOGIN_THROTTLE", default="20/hour"),
+        "vendor-password-reset": env("VENDOR_PASSWORD_RESET_THROTTLE", default="10/hour"),
     },
 }
 
@@ -141,14 +143,19 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
 }
 
-# Paystack Kenya (test keys — fill in locally, do not commit secrets)
-PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
-PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", default="")
-# Subaccount defaults (Kenya). MPTILL = "M-PESA Till" from List Banks (country=kenya).
-PAYSTACK_DEFAULT_SETTLEMENT_BANK = env("PAYSTACK_DEFAULT_SETTLEMENT_BANK", default="MPTILL")
-# Placeholder marketplace commission: platform keeps 5%, vendor settles ~95%.
-# Easy to change later via env or Paystack update_subaccount.
-PAYSTACK_DEFAULT_PERCENTAGE_CHARGE = env.float("PAYSTACK_DEFAULT_PERCENTAGE_CHARGE", default=5.0)
+# Vendor password-reset links and customer reset codes.
+# Console backend prints the message locally. Set SMTP vars to send real mail.
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="SalamaFarm <noreply@salamafarm.com>")
+PORTAL_ORIGIN = env("PORTAL_ORIGIN", default="http://localhost:8080").rstrip("/")
 
 # Customer phone auth (mobile app)
 # Africa's Talking SMS. Leave AFRICASTALKING_API_KEY blank locally: the OTP is
@@ -174,7 +181,6 @@ R2_CORS_ORIGINS = [
     if part.strip()
 ]
 PASSWORD_RESET_TTL_SECONDS = env.int("PASSWORD_RESET_TTL_SECONDS", default=900)  # 15 min
-PASSWORD_RESET_DEV_MODE = env.bool("PASSWORD_RESET_DEV_MODE", default=True)
 
 # Comma-separated OAuth client IDs (Android, iOS, Web) accepted as Google ID token audience.
 GOOGLE_OAUTH_CLIENT_IDS = [

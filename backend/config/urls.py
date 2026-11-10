@@ -6,7 +6,6 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 
-from payments.urls import webhook_urlpatterns
 from visits.views import AppVisitsAnalyticsView
 from core.health import health, ready, root
 
@@ -35,13 +34,11 @@ urlpatterns = [
     path("api/v1/marketplace/", include("messaging.marketplace_urls")),
     path("api/v1/marketplace/", include("visits.marketplace_urls")),
     path("api/v1/", include("messaging.urls")),
-    path("api/v1/", include("payments.urls")),
     path(
         "api/v1/analytics/app-visits/",
         AppVisitsAnalyticsView.as_view(),
         name="app-visits",
     ),
-    path("api/", include(webhook_urlpatterns)),
     # Health endpoints for liveness/readiness probes
     path("health/", health, name="health"),
     path("health.json", health, name="health-json"),

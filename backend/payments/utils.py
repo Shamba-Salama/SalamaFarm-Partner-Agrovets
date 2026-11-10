@@ -1,4 +1,4 @@
-"""Phone / amount helpers for Paystack Kenya charges."""
+"""Phone and amount helpers for Kenyan M-Pesa numbers."""
 
 from __future__ import annotations
 

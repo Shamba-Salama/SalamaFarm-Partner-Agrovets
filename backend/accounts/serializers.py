@@ -1,17 +1,13 @@
 """Serializers for vendor auth and registration."""
 
-import logging
-
+from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
 
 from stores.kenya import normalize_kenya_phone, resolve_kenya_county
 from stores.models import AgrovetStore
-from stores.paystack_subaccount import ensure_paystack_subaccount
 
 from .models import VendorUser
-
-logger = logging.getLogger(__name__)
 
 
 class StoreSummarySerializer(serializers.ModelSerializer):
@@ -101,17 +97,24 @@ class RegisterSerializer(serializers.Serializer):
                 open=True,
                 onboarded=False,
             )
-        # Best-effort Paystack subaccount — never fail registration on Paystack errors.
-        result = ensure_paystack_subaccount(store)
-        if not result.ok:
-            logger.warning(
-                "Paystack subaccount not created during registration for "
-                "store_id=%s email=%s: %s",
-                store.pk,
-                user.email,
-                result.error,
-            )
         return user
 
     def to_representation(self, instance: VendorUser) -> dict:
         return VendorMeSerializer(instance, context=self.context).data
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value: str) -> str:
+        return value.strip().lower()
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_password(self, value: str) -> str:
+        validate_password(value)
+        return value

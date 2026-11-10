@@ -1,9 +1,7 @@
 """Africa's Talking SMS client + OTP delivery.
 
-Thin ``requests`` wrapper mirroring payments.paystack_client (no vendor SDK).
-When no API key is configured the OTP is logged to the console instead of sent,
-so the phone-auth flow is fully testable locally with zero cost/credentials —
-the same "best-effort external integration" posture the Paystack code uses.
+Thin ``requests`` wrapper. When no API key is configured the OTP is logged
+to the console instead of sent, so phone auth can be tested locally.
 """
 
 from __future__ import annotations

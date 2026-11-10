@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { CheckCircle2, FileText, RefreshCw, Search, ShieldCheck, Smartphone } from "lucide-react";
+import { CheckCircle2, FileText, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { PortalLayout } from "@/components/portal/PortalLayout";
@@ -27,7 +27,6 @@ import { ChannelBadge } from "@/components/portal/ChatDrawer";
 import { formatKES, usePortal, VAT_RATE, type CustomerOrder } from "@/lib/portal-store";
 import { ApiError } from "@/lib/api-client";
 import { formatApiError } from "@/lib/format-api-error";
-import { normalizeKenyaMsisdn } from "@/lib/payments-api";
 import { printReceipt } from "@/lib/export";
 import { cn } from "@/lib/utils";
 
@@ -58,35 +57,6 @@ function formatPaidAt(iso: string): string {
   return d.toLocaleString();
 }
 
-function chargeFailureToast(err: unknown): void {
-  if (!(err instanceof ApiError)) {
-    toast.error("Could not initiate charge.");
-    return;
-  }
-  const detail = formatApiError(err);
-  if (err.status === 400) {
-    toast.error("Charge could not start", {
-      description: detail || "Check the phone number, subaccount, and order amount.",
-    });
-    return;
-  }
-  if (err.status === 404) {
-    toast.error("Order not found", {
-      description: detail || "This order no longer exists for your store.",
-    });
-    return;
-  }
-  if (err.status === 502) {
-    toast.error("Paystack unreachable", {
-      description:
-        detail ||
-        "Paystack rejected or could not be reached. The charge was not initiated — try again later.",
-    });
-    return;
-  }
-  toast.error(detail || "Could not initiate charge.");
-}
-
 function OrdersPage() {
   const {
     orders,
@@ -95,12 +65,13 @@ function OrdersPage() {
     setPickup,
     clearNewOrders,
     refreshOrders,
-    chargeCounterOrder,
+    recordMpesaCode,
   } = usePortal();
   const [verify, setVerify] = useState("");
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [chargingId, setChargingId] = useState<string | null>(null);
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [codeDraft, setCodeDraft] = useState("");
   const [refreshingPayments, setRefreshingPayments] = useState(false);
 
   const match = verify.trim()
@@ -147,32 +118,18 @@ function OrdersPage() {
     }
   };
 
-  const onCharge = async (o: CustomerOrder) => {
-    if (o.paidAt || chargingId) return;
-    const e164 = normalizeKenyaMsisdn(o.phone);
-    if (!e164) {
-      toast.error("Invalid phone on this order", {
-        description: "Use 07XXXXXXXX or +2547XXXXXXXX before charging.",
-      });
-      return;
-    }
-    if (!profile.paystackSubaccountCode?.trim()) {
-      toast.error("Paystack subaccount required", {
-        description: "Create a subaccount from the STK Push dialog before charging.",
-      });
-      return;
-    }
-    setChargingId(o.id);
+  const onRecordCode = async (id: string) => {
+    if (busyId) return;
+    setBusyId(id);
     try {
-      const res = await chargeCounterOrder({ orderId: o.id, phone: e164 });
-      const text =
-        res.display_text?.trim() ||
-        `Charge started (${res.status ?? "pending"}). Reference ${res.reference}.`;
-      toast.message("STK prompt sent — awaiting confirmation", { description: text });
+      await recordMpesaCode(id, codeDraft);
+      toast.success("M-Pesa code recorded");
+      setRecordingId(null);
+      setCodeDraft("");
     } catch (err) {
-      chargeFailureToast(err);
+      toast.error(err instanceof ApiError ? formatApiError(err) : "Could not record the code.");
     } finally {
-      setChargingId(null);
+      setBusyId(null);
     }
   };
 
@@ -355,17 +312,39 @@ function OrdersPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex flex-wrap justify-end gap-2">
-                          {o.paidAt === null && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              disabled={chargingId !== null}
-                              onClick={() => void onCharge(o)}
-                            >
-                              <Smartphone className="mr-1.5 h-4 w-4" />
-                              {chargingId === o.id ? "Sending…" : "Charge"}
-                            </Button>
-                          )}
+                          {o.paidAt === null &&
+                            (recordingId === o.id ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={codeDraft}
+                                  onChange={(e) => setCodeDraft(e.target.value.toUpperCase())}
+                                  placeholder="CODE"
+                                  className="h-8 w-28 font-mono uppercase"
+                                  maxLength={20}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") void onRecordCode(o.id);
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  disabled={busyId === o.id || codeDraft.trim().length === 0}
+                                  onClick={() => void onRecordCode(o.id)}
+                                >
+                                  {busyId === o.id ? "Saving…" : "Save"}
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setRecordingId(o.id);
+                                  setCodeDraft("");
+                                }}
+                              >
+                                Record code
+                              </Button>
+                            ))}
                           <Button
                             size="sm"
                             variant="outline"

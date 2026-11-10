@@ -119,6 +119,7 @@ export type CounterOrderCreateInput = {
   phone: string;
   customerName?: string;
   channel: "in-app" | "offline-sms";
+  mpesaCode?: string;
 };
 
 /** Build create body with amount == sum of item cents as fixed 2-decimal strings. */
@@ -140,7 +141,7 @@ export function buildCounterOrderBody(input: CounterOrderCreateInput) {
     ],
     amount: money(lineCents),
     status: "Pending",
-    mpesa_code: "",
+    mpesa_code: (input.mpesaCode || "").trim().toUpperCase(),
     channel: input.channel,
     order_type: "Counter Pickup",
     pickup: "Unmatched",
@@ -184,6 +185,7 @@ export async function patchOrder(
     pickup: string;
     order_type: string;
     channel: string;
+    mpesa_code: string;
   }>,
 ): Promise<ApiOrder> {
   return api.patch<ApiOrder>(`/orders/${id}/`, patch);

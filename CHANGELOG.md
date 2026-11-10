@@ -7,6 +7,19 @@ Version **1.0.0** is the first consolidated release of the Django-backed vendor 
 
 ---
 
+## [Unreleased] — 2026-11-10
+
+### Fixed (errors and issues solved)
+
+| Issue | Cause | Resolution |
+|--------|--------|------------|
+| **Forgot password and reset password did nothing** | Portal called `/auth/forgot-password/`, `/auth/recover-session/`, and `/auth/reset-password/`, which were not implemented. The reset page sent only a new password and never read the link. | Email a one-time link (`uid` + `token`). The reset page checks the link, then posts `uid`, `token`, and the new password. Requests are limited to 10 per hour. |
+| **Vendor login had no rate limit** | `POST /api/v1/auth/token/` was unthrottled. Customer login already was. | 20 attempts per email per hour. Further attempts return 429. |
+| **Customer reset code written to server logs** | Password-reset delivery logged the plaintext 6-digit code and still reported success. | The code is emailed and is not logged. |
+| **Checkout still required Paystack** | Charge, webhook, and subaccount endpoints were live, but the product does not use Paystack. | Removed Paystack. A marketplace order stays unpaid until the agrovet records the M-Pesa confirmation code, which sets `paid_at`. |
+
+---
+
 ## [1.0.0] — 2026-11-07
 
 ### What this release is
