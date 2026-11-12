@@ -15,9 +15,12 @@ import { cn } from "@/lib/utils";
 export function ProductGalleryPicker({
   onPick,
   pickingId,
+  disabled = false,
 }: {
   onPick: (item: GalleryItem) => void;
   pickingId: string | null;
+  /** When true (e.g. saving product), gallery cannot be toggled or used. */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -32,6 +35,7 @@ export function ProductGalleryPicker({
         variant="outline"
         size="sm"
         className="w-full"
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
         <Images className="mr-1.5 h-4 w-4" />
@@ -45,13 +49,14 @@ export function ProductGalleryPicker({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search gallery…"
             aria-label="Search Salama product gallery"
+            disabled={disabled}
           />
           <div className="flex flex-wrap gap-1.5">
-            <FilterChip active={category === "all"} onClick={() => setCategory("all")}>
+            <FilterChip active={category === "all"} onClick={() => setCategory("all")} disabled={disabled}>
               All
             </FilterChip>
             {CATEGORIES.map((c) => (
-              <FilterChip key={c} active={category === c} onClick={() => setCategory(c)}>
+              <FilterChip key={c} active={category === c} onClick={() => setCategory(c)} disabled={disabled}>
                 {c}
               </FilterChip>
             ))}
@@ -66,7 +71,7 @@ export function ProductGalleryPicker({
                   <button
                     key={item.id}
                     type="button"
-                    disabled={!!pickingId}
+                    disabled={!!pickingId || disabled}
                     onClick={() => onPick(item)}
                     className={cn(
                       "overflow-hidden rounded-lg border border-border bg-muted text-left transition-colors hover:border-primary disabled:opacity-60",
@@ -97,15 +102,18 @@ function FilterChip({
   active,
   onClick,
   children,
+  disabled: chipDisabled,
 }: {
   active: boolean;
   onClick: () => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={chipDisabled}
       className={cn(
         "rounded-full border px-2 py-0.5 text-[11px]",
         active

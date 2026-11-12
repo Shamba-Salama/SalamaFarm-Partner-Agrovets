@@ -1,12 +1,12 @@
 # SalamaFarm Partner Agrovets
 
-Vendor portal for registered SalamaFarm agrovet partners: store onboarding, inventory, M-Pesa (Paystack Kenya) counter sales, farmer messaging, and post-purchase follow-ups.
+Vendor portal for registered SalamaFarm agrovet partners: store onboarding, inventory, counter sales with recorded M-Pesa codes, farmer messaging, and post-purchase follow-ups.
 
 **Stack**
 
 - **Backend** — Django REST API (JWT, multi-tenant store scoping) under `backend/`
 - **Frontend** — React + TanStack Start / Vite under the repo root
-- **Payments** — Paystack Kenya (subaccounts, M-Pesa charge, webhooks)
+- **Payments** — M-Pesa confirmation codes recorded on the order
 
 ## Quick Start with Docker (Recommended)
 
@@ -19,7 +19,7 @@ cd SalamaFarm-Partner-Agrovets
 
 # Copy and configure environment
 cp .env.docker.example .env
-# Edit .env with your SECRET_KEY, POSTGRES_PASSWORD, and Paystack keys
+# Edit .env with your SECRET_KEY and POSTGRES_PASSWORD
 
 # Build and run all services
 docker-compose up --build
@@ -55,7 +55,7 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env — set SECRET_KEY; add PAYSTACK_SECRET_KEY / PAYSTACK_PUBLIC_KEY for payments
+# Edit .env — set SECRET_KEY. Set SMTP vars when password-reset email should leave the server.
 
 python manage.py migrate
 python manage.py runserver
@@ -102,7 +102,7 @@ The frontend talks to `http://127.0.0.1:8000/api/v1` by default (`VITE_API_BASE_
 
 **Customer care / CRM** — post-purchase follow-up tracking (Pending / Contacted / Satisfied), one-tap WhatsApp follow-up messages, direct-call shortcuts.
 
-**M-Pesa transaction reconciliation** — Paystack-mediated counter charges, with M-Pesa confirmation codes matched against orders for fraud prevention at pickup.
+**M-Pesa transaction reconciliation** — confirmation codes recorded on orders and matched before pickup.
 
 **Messaging** — store ↔ farmer chat threads (REST-backed, polling; real-time is a future enhancement).
 

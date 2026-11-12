@@ -56,7 +56,7 @@ class MpesaTransactionAdmin(admin.ModelAdmin):
             {
                 "fields": ("raw_webhook",),
                 "classes": ("collapse",),
-                "description": "Full Paystack webhook JSON for audit. Read-only.",
+                "description": "Raw payload stored with this transaction. Read-only.",
             },
         ),
         (

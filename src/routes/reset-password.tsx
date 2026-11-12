@@ -31,12 +31,23 @@ function ResetPasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [linkState, setLinkState] = useState<"checking" | "ready" | "invalid">("checking");
+  const [uid, setUid] = useState("");
+  const [token, setToken] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    const nextUid = params.get("uid") ?? "";
+    const nextToken = params.get("token") ?? "";
+    if (!nextUid || !nextToken) {
+      setLinkState("invalid");
+      return;
+    }
+    setUid(nextUid);
+    setToken(nextToken);
     (async () => {
       try {
-        await api.post("/auth/recover-session/", {}, { auth: false });
+        await api.post("/auth/recover-session/", { uid: nextUid, token: nextToken }, { auth: false });
         if (!cancelled) setLinkState("ready");
       } catch {
         if (!cancelled) setLinkState("invalid");
@@ -53,7 +64,7 @@ function ResetPasswordPage() {
     if (!valid || submitting || linkState !== "ready") return;
     setSubmitting(true);
     try {
-      const me = await completePasswordReset(password);
+      const me = await completePasswordReset({ uid, token, password });
       toast.success("Password updated. You can sign in now.");
       void navigate({ to: me ? "/" : "/login" });
     } catch (err) {

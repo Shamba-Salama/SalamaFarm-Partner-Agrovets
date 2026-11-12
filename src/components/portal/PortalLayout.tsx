@@ -213,8 +213,8 @@ export function PortalLayout({
               </button>
               <Button size="sm" className="shrink-0" onClick={() => setStkOpen(true)}>
                 <Smartphone className="h-4 w-4 sm:mr-1.5" />
-                <span className="sm:hidden">STK</span>
-                <span className="hidden sm:inline">Counter M-Pesa STK</span>
+                <span className="sm:hidden">Sale</span>
+                <span className="hidden sm:inline">Counter sale</span>
               </Button>
               <Button
                 size="sm"

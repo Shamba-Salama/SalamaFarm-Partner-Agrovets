@@ -1,15 +1,34 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { Store } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { AuthShell } from "@/components/AuthShell";
+import { AuthCard, authFieldClass, authLabelClass } from "@/components/auth/AuthCard";
+import { AuthLoadingScreen, AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatApiError } from "@/lib/format-api-error";
 import { useAuth } from "@/lib/auth-context";
+import {
+  isValidKenyaPhone,
+  isValidKenyaTown,
+  isValidSignupEmail,
+  isValidStoreName,
+  KENYA_COUNTIES,
+  normalizeKenyaPhone,
+  resolveKenyaCounty,
+} from "@/lib/kenya-locations";
 import { usePortal } from "@/lib/portal-store";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({
   head: () => ({
@@ -18,7 +37,7 @@ export const Route = createFileRoute("/onboarding")({
       {
         name: "description",
         content:
-          "Register your agrovet store in one short form — store name, town, county, M-Pesa till and attendant phone. Instant access, no permits required.",
+          "Register your agrovet store — store name, town, county, and attendant phone. Instant access.",
       },
       { property: "og:title", content: "Agrovet Sign Up | SalamaFarm Partner Portal" },
       {
@@ -37,12 +56,12 @@ function OnboardingPage() {
   const { register, isAuthenticated, isBootstrapping } = useAuth();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [touched, setTouched] = useState(false);
   const [form, setForm] = useState({
     email: "",
     name: profile.name,
     town: profile.town,
-    county: profile.county,
-    till: profile.till,
+    county: resolveKenyaCounty(profile.county) ?? "",
     attendantPhone: profile.attendantPhone,
     password: "",
   });
@@ -56,29 +75,54 @@ function OnboardingPage() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const valid =
-    form.email.includes("@") &&
-    form.name.trim().length > 1 &&
-    form.town.trim().length > 1 &&
-    form.county.trim().length > 1 &&
-    form.till.trim().length > 3 &&
-    form.attendantPhone.trim().length > 8 &&
-    form.password.length >= 8;
+  const fieldErrors = useMemo(() => {
+    const errors: Partial<Record<keyof typeof form | "country", string>> = {};
+    if (!isValidSignupEmail(form.email)) {
+      errors.email = "Enter a valid email address.";
+    }
+    if (!isValidStoreName(form.name)) {
+      errors.name = "Enter a real store name (letters or numbers, at least 2 characters).";
+    }
+    if (!isValidKenyaTown(form.town)) {
+      errors.town = "Enter a town or area name (letters required, not numbers only).";
+    }
+    if (!form.county || !resolveKenyaCounty(form.county)) {
+      errors.county = "Choose a county from the list.";
+    }
+    if (!isValidKenyaPhone(form.attendantPhone)) {
+      errors.attendantPhone = "Use a Kenyan mobile number (e.g. 0712345678 or +254712345678).";
+    }
+    if (form.password.length < 8) {
+      errors.password = "Password must be at least 8 characters.";
+    }
+    return errors;
+  }, [form]);
+
+  const valid = Object.keys(fieldErrors).length === 0;
 
   const onSubmit = async () => {
-    if (!valid || submitting) return;
+    setTouched(true);
+    if (!valid || submitting) {
+      const first = Object.values(fieldErrors)[0];
+      if (first) toast.error(first);
+      return;
+    }
+    const county = resolveKenyaCounty(form.county);
+    const phone = normalizeKenyaPhone(form.attendantPhone);
+    if (!county || !phone) return;
+
     setSubmitting(true);
     try {
       await register({
-        email: form.email.trim(),
+        email: form.email.trim().toLowerCase(),
         password: form.password,
-        phone: form.attendantPhone.trim(),
+        phone,
         store: {
           name: form.name.trim(),
           town: form.town.trim(),
-          county: form.county.trim(),
-          till: form.till.trim(),
-          attendant_phone: form.attendantPhone.trim(),
+          county,
+          till: "",
+          attendant_phone: phone,
         },
       });
       toast.success("Welcome to SalamaFarm Partner Portal!", {
@@ -93,72 +137,175 @@ function OnboardingPage() {
   };
 
   if (isBootstrapping) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-sidebar text-sm text-sidebar-foreground/80">
-        Checking session…
-      </div>
-    );
+    return <AuthLoadingScreen />;
   }
 
   return (
     <AuthShell
       headline="Sell to thousands of farmers from your counter."
-      description="No permits, no paperwork, no waiting. Fill one form and start listing stock today."
-      footer="Instant access · Live farmer chat · Counter STK push"
+      description="No permits or long forms—just your store details. List stock the same day farmers walk in."
+      footer="Instant access · Live farmer chat · Add M-Pesa till in settings"
+      contentClassName="max-w-md lg:max-w-[32rem]"
     >
-      <Card>
-        <CardContent className="space-y-4 p-5 sm:p-6">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Register your agrovet</h1>
-            <p className="text-sm text-muted-foreground">
-              Tell us where farmers can find and pay you. Access is granted immediately.
-            </p>
-          </div>
-
+      <AuthCard
+        title="Register your agrovet"
+        description="Tell us where farmers can find you. Access is granted immediately."
+        badge={{ icon: Store, label: "New store" }}
+      >
+        <div className="space-y-4">
+          <AuthSection title="Account" />
           <Field
             label="Email"
             value={form.email}
             onChange={set("email")}
             placeholder="you@agrovet.co.ke"
             type="email"
+            autoComplete="email"
+            error={touched ? fieldErrors.email : undefined}
           />
-          <Field label="Store name" value={form.name} onChange={set("name")} placeholder="Green Valley Agrovet" />
+          <AuthSection title="Store location" />
+          <Field
+            label="Store name"
+            value={form.name}
+            onChange={set("name")}
+            placeholder="Green Valley Agrovet"
+            error={touched ? fieldErrors.name : undefined}
+          />
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Physical location / town" value={form.town} onChange={set("town")} placeholder="Nakuru Town" />
-            <Field label="County" value={form.county} onChange={set("county")} placeholder="Nakuru" />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="M-Pesa Till / Paybill number" value={form.till} onChange={set("till")} placeholder="5203817" />
             <Field
-              label="Store attendant phone number"
-              value={form.attendantPhone}
-              onChange={set("attendantPhone")}
-              placeholder="0712345678"
+              label="Physical location / town"
+              value={form.town}
+              onChange={set("town")}
+              placeholder="Nakuru Town"
+              error={touched ? fieldErrors.town : undefined}
+            />
+            <CountySelect
+              value={form.county}
+              onChange={(v) => setForm((f) => ({ ...f, county: v }))}
+              error={touched ? fieldErrors.county : undefined}
             />
           </div>
+          <CountryField />
+          <AuthSection title="Contact & security" />
           <Field
+            label="Store attendant phone number"
+            value={form.attendantPhone}
+            onChange={set("attendantPhone")}
+            placeholder="0712345678"
+            type="tel"
+            autoComplete="tel"
+            error={touched ? fieldErrors.attendantPhone : undefined}
+          />
+          <PasswordField
             label="Account password"
             value={form.password}
             onChange={set("password")}
             placeholder="At least 8 characters"
-            type="password"
+            error={touched ? fieldErrors.password : undefined}
           />
 
-          <Button className="w-full" disabled={!valid || submitting} onClick={() => void onSubmit()}>
+          <Button
+            className={cn("h-11 w-full rounded-lg text-sm font-semibold shadow-sm")}
+            disabled={submitting}
+            onClick={() => void onSubmit()}
+          >
             {submitting ? "Creating account…" : "Create store account"}
           </Button>
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-center text-xs leading-relaxed text-muted-foreground">
             Already registered?{" "}
-            <Link to="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+            <Link to="/login" className="font-semibold text-primary underline-offset-4 hover:underline">
               Sign in
             </Link>
           </p>
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-center text-xs leading-relaxed text-muted-foreground">
             No business permit or agrochemical license upload needed.
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </AuthCard>
     </AuthShell>
+  );
+}
+
+function AuthSection({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <span className="h-px flex-1 bg-gradient-to-r from-primary/25 to-transparent" aria-hidden />
+      <span className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{title}</span>
+      <span className="h-px flex-1 bg-gradient-to-l from-primary/25 to-transparent" aria-hidden />
+    </div>
+  );
+}
+
+function CountryField() {
+  return (
+    <div className="space-y-1.5">
+      <Label className={authLabelClass}>Country</Label>
+      <Input
+        value="Kenya"
+        disabled
+        className={cn(authFieldClass, "bg-muted/80 text-muted-foreground")}
+        aria-readonly
+      />
+      <p className="text-xs text-muted-foreground">SalamaFarm Partner currently onboards stores in Kenya only.</p>
+    </div>
+  );
+}
+
+function CountySelect({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (county: string) => void;
+  error?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className={authLabelClass}>County</Label>
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger className={authFieldClass} aria-invalid={!!error}>
+          <SelectValue placeholder="Select county" />
+        </SelectTrigger>
+        <SelectContent>
+          {KENYA_COUNTIES.map((c) => (
+            <SelectItem key={c} value={c}>
+              {c}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+function PasswordField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  error?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className={authLabelClass}>{label}</Label>
+      <PasswordInput
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoComplete="new-password"
+        className={authFieldClass}
+        aria-invalid={!!error}
+      />
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
   );
 }
 
@@ -168,17 +315,30 @@ function Field({
   onChange,
   placeholder,
   type,
+  autoComplete,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder?: string;
   type?: string;
+  autoComplete?: string;
+  error?: string;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
-      <Input value={value} onChange={onChange} placeholder={placeholder} type={type} />
+      <Label className={authLabelClass}>{label}</Label>
+      <Input
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        type={type}
+        autoComplete={autoComplete}
+        className={authFieldClass}
+        aria-invalid={!!error}
+      />
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

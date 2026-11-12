@@ -11,7 +11,6 @@ class AgrovetStoreAdmin(admin.ModelAdmin):
         "town",
         "county",
         "till",
-        "paystack_subaccount_code",
         "open",
         "onboarded",
         "updated_at",
@@ -22,7 +21,6 @@ class AgrovetStoreAdmin(admin.ModelAdmin):
         "town",
         "county",
         "till",
-        "paystack_subaccount_code",
         "owner__email",
         "attendant_phone",
     )

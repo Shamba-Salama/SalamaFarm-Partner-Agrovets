@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Best-effort message from ApiError, Error, fetch failures, or Supabase payloads. */
+/** Best-effort message from ApiError, Error, or fetch failures. */
 export function messageFromUnknown(err: unknown): string | null {
   if (typeof err === "string" && err.trim()) return err.trim();
   if (err instanceof Error && err.message.trim()) return err.message.trim();
