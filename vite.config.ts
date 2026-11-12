@@ -12,6 +12,25 @@ const djangoOrigin = (process.env.DJANGO_API_ORIGIN || "https://api-next.salamaf
   "",
 );
 
+// Shared by every deployed target: browser → /api/** → Django (no CORS).
+const apiProxyRule = {
+  "/api/**": { proxy: `${djangoOrigin}/api/**` },
+};
+
+function nitroConfig() {
+  // Vercel sets VERCEL=1 during `npm run build`; needs the vercel preset so SSR
+  // runs as a Function instead of a Cloudflare worker served as static files.
+  if (process.env.VERCEL) {
+    return { preset: "vercel" as const, routeRules: apiProxyRule };
+  }
+  // Docker / self-hosted: build a standalone Node server (.output/server/index.mjs).
+  if (process.env.NITRO_TARGET === "node") {
+    return { preset: "node-server" as const, routeRules: apiProxyRule };
+  }
+  // Lovable/local builds keep Nitro's Cloudflare default.
+  return {};
+}
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
@@ -20,8 +39,10 @@ export default defineConfig({
   },
   // Do not set ssr.optimizeDeps.include for @tanstack/* — pre-bundling can resolve a second
   // copy of react and break SSR with "Invalid hook call" / useContext on null.
-  // Browser → /api/** → Django (no CORS). Vite and the Vercel Nitro build use this origin.
   vite: {
+    resolve: {
+      dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+    },
     server: {
       // Lovable defaults to host `::`; on Windows, HMR WebSockets often fail when the tab uses localhost.
       host: "127.0.0.1",
@@ -39,21 +60,6 @@ export default defineConfig({
         },
       },
     },
-    ssr: {
-      resolve: {
-        dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
-      },
-    },
   },
-  // Lovable/local builds keep Nitro's Cloudflare default. Vercel sets VERCEL=1
-  // during `npm run build` and needs the vercel preset so SSR runs as a Function
-  // instead of a Cloudflare worker served as static files (which 500s on GET /).
-  nitro: process.env.VERCEL
-    ? {
-        preset: "vercel",
-        routeRules: {
-          "/api/**": { proxy: `${djangoOrigin}/api/**` },
-        },
-      }
-    : {},
+  nitro: nitroConfig(),
 });
