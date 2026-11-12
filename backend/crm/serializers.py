@@ -181,6 +181,13 @@ class CustomerOrderCreateSerializer(serializers.Serializer):
                 "Provide customer_id or customer, not both."
             )
 
+        code = (attrs.get("mpesa_code") or "").strip().upper()
+        attrs["mpesa_code"] = code
+        if code and not attrs.get("paid_at"):
+            attrs["paid_at"] = timezone.now()
+            if attrs.get("pickup") == CustomerOrder.Pickup.UNMATCHED:
+                attrs["pickup"] = CustomerOrder.Pickup.AWAITING_PICKUP
+
         items = attrs["items"]
         computed = sum((i["qty"] * i["price"] for i in items), Decimal("0"))
         if computed != attrs["amount"]:
@@ -252,11 +259,25 @@ class CustomerOrderCreateSerializer(serializers.Serializer):
 
 
 class CustomerOrderPatchSerializer(serializers.ModelSerializer):
-    """Items are immutable after creation — only workflow fields here."""
+    """Items are immutable after creation — workflow fields plus a recorded M-Pesa code."""
 
     class Meta:
         model = CustomerOrder
-        fields = ("status", "pickup", "order_type", "channel")
+        fields = ("status", "pickup", "order_type", "channel", "mpesa_code")
+
+    def validate_mpesa_code(self, value: str) -> str:
+        return (value or "").strip().upper()
+
+    def update(self, instance, validated_data):
+        code = validated_data.get("mpesa_code")
+        if code and instance.paid_at is None:
+            validated_data["paid_at"] = timezone.now()
+            if (
+                instance.pickup == CustomerOrder.Pickup.UNMATCHED
+                and "pickup" not in validated_data
+            ):
+                validated_data["pickup"] = CustomerOrder.Pickup.AWAITING_PICKUP
+        return super().update(instance, validated_data)
 
 
 # --------------------------------------------------------------------------- #

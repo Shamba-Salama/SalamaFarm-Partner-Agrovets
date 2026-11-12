@@ -47,7 +47,6 @@ import {
   type AppVisitsStats,
   type WeeklySalesRow,
 } from "@/lib/analytics-api";
-import { chargeOrder, createSubaccount, type ChargeResponse } from "@/lib/payments-api";
 import {
   apiMessageToMessage,
   apiThreadToThread,
@@ -61,7 +60,6 @@ import { ApiError } from "@/lib/api-client";
 import { getAccessToken } from "@/lib/auth-storage";
 
 export type { WeeklySalesRow } from "@/lib/analytics-api";
-export type { ChargeResponse } from "@/lib/payments-api";
 export { prepareWeeklySalesChartRows } from "@/lib/analytics-api";
 
 export type { ApiStore, StoreProfile } from "@/lib/store-api";
@@ -262,14 +260,9 @@ type Ctx = {
     phone: string;
     productId: string;
     customer?: string;
+    mpesaCode?: string;
   }) => Promise<{ order: CustomerOrder; channel: Channel }>;
-  /** Initiate Paystack STK for an unpaid order. Does not mark paid locally. */
-  chargeCounterOrder: (input: { orderId: string; phone: string }) => Promise<ChargeResponse>;
-  createStoreSubaccount: () => Promise<{
-    created: boolean;
-    subaccountCode: string;
-    profile: StoreProfile;
-  }>;
+  recordMpesaCode: (id: string, code: string) => Promise<CustomerOrder>;
   weeklySales: WeeklySalesRow[];
   weeklySalesReady: boolean;
   weeklySalesLoading: boolean;
@@ -335,7 +328,6 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [newOrderCount, setNewOrderCount] = useState(0);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
-  const chargingOrderIds = useRef(new Set<string>());
   const threadsRef = useRef<Thread[]>([]);
   threadsRef.current = threads;
   const openThreadIdRef = useRef<string | null>(null);
@@ -707,7 +699,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   );
 
   const createCounterOrder = useCallback(
-    async (input: { phone: string; productId: string; customer?: string }) => {
+    async (input: { phone: string; productId: string; customer?: string; mpesaCode?: string }) => {
       const product = products.find((p) => p.id === input.productId);
       if (!product) {
         throw new ApiError("Select a product from inventory.", 400, null);
@@ -724,6 +716,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         phone: normalized,
         customerName: input.customer,
         channel,
+        mpesaCode: input.mpesaCode,
       });
       const order = await createOrderEntry(body);
       void refreshCustomers().catch(() => undefined);
@@ -732,30 +725,18 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     [products, orders, customers, threads, createOrderEntry, refreshCustomers],
   );
 
-  const chargeCounterOrder = useCallback(async (input: { orderId: string; phone: string }) => {
-    const id = input.orderId;
-    if (chargingOrderIds.current.has(id)) {
-      throw new ApiError("A charge is already in progress for this order.", 409, null);
-    }
-    chargingOrderIds.current.add(id);
-    try {
-      return await chargeOrder({ orderId: id, phone: input.phone });
-    } finally {
-      chargingOrderIds.current.delete(id);
-    }
-  }, []);
-
-  const createStoreSubaccount = useCallback(async () => {
-    const res = await createSubaccount();
-    const next = apiStoreToProfile(res.store);
-    setProfileState(next);
-    setStoreReady(true);
-    return {
-      created: res.created,
-      subaccountCode: res.subaccount_code,
-      profile: next,
-    };
-  }, []);
+  const recordMpesaCode = useCallback(
+    async (id: string, code: string) => {
+      const trimmed = code.trim().toUpperCase();
+      if (!trimmed) {
+        throw new ApiError("Enter the M-Pesa confirmation code.", 400, null);
+      }
+      const updated = mapOrder(apiOrderToOrder(await patchOrder(id, { mpesa_code: trimmed })));
+      setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
+      return updated;
+    },
+    [mapOrder],
+  );
 
   const resetWeeklySales = useCallback(() => {
     setWeeklySales([]);
@@ -1094,8 +1075,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       resetCustomers,
       createOrderEntry,
       createCounterOrder,
-      chargeCounterOrder,
-      createStoreSubaccount,
+      recordMpesaCode,
       weeklySales,
       weeklySalesReady,
       weeklySalesLoading,
@@ -1160,8 +1140,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       resetCustomers,
       createOrderEntry,
       createCounterOrder,
-      chargeCounterOrder,
-      createStoreSubaccount,
+      recordMpesaCode,
       weeklySales,
       weeklySalesReady,
       weeklySalesLoading,

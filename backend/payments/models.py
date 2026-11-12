@@ -1,4 +1,4 @@
-"""Payment models — Paystack Kenya (split payments to agrovet subaccounts)."""
+"""Payment ledger for M-Pesa receipts recorded against a store."""
 
 from django.db import models
 
@@ -7,9 +7,10 @@ from core.models import BaseStoreOwnedModel
 
 class MpesaTransaction(BaseStoreOwnedModel):
     """
-    Paystack-backed payment attempt for a store (optionally linked to an order).
+    Historical payment attempt for a store (optionally linked to an order).
 
-    Named historically for M-Pesa receipts; charges go through Paystack Kenya.
+    New sales record the M-Pesa confirmation code on CustomerOrder. Rows already
+    stored here stay available for audit.
     """
 
     class Kind(models.TextChoices):
@@ -40,12 +41,12 @@ class MpesaTransaction(BaseStoreOwnedModel):
         max_length=100,
         blank=True,
         unique=True,
-        help_text="Paystack transaction reference",
+        help_text="Gateway reference, when this row came from an external charge",
     )
     subaccount_code = models.CharField(
         max_length=64,
         blank=True,
-        help_text="Paystack subaccount code snapshotted at charge time",
+        help_text="Settlement account code snapshotted at charge time, if any",
     )
     phone = models.CharField(max_length=20)
     amount = models.DecimalField(max_digits=10, decimal_places=2)

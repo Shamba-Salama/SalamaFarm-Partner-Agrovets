@@ -1,6 +1,10 @@
 # Backend — SalamaFarm Partner Agrovets API
 
-Django REST API for the agrovet vendor portal (multi-tenant, JWT, Paystack Kenya).
+Django REST API for the agrovet vendor portal (multi-tenant, JWT).
+
+## Live Hostinger VPS operations
+
+The Django API is served from the Hostinger VPS at `https://api-next.salamafarm.com`. See [`HOSTINGER_VPS_OPERATIONS.md`](../HOSTINGER_VPS_OPERATIONS.md) for topology, health checks, backups, and recovery.
 
 ## Live Hostinger VPS operations
 
@@ -24,11 +28,34 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# Edit .env — at minimum set a SECRET_KEY; add Paystack keys when testing payments
+# Edit .env — at minimum set a SECRET_KEY. Set SMTP vars to send password-reset email.
 
 python manage.py migrate
 python manage.py runserver
 ```
+
+### Windows troubleshooting
+
+- Use **Python 3.12+** in a project venv (see Requirements). If `py -3.12` reports no runtime, install 3.12 from [python.org](https://www.python.org/downloads/) or point `python` at that install when creating `.venv`.
+- If `manage.py` raises **`Error loading psycopg2 or psycopg module`** and `.env` sets **`DATABASE_URL`** to PostgreSQL, either install a matching PostgreSQL/libpq stack so **`psycopg2-binary`** can load its DLLs, or set **`DATABASE_URL=sqlite:///db.sqlite3`** for local dev/tests.
+
+### Cloudflare R2
+
+Fill **`R2_*`** in `.env` when you use vendor portal image uploads (`POST /api/upload-url/`). **`migrate` and `runserver` do not require R2**; without it, that endpoint returns **503** with a clear message.
+
+**Browser uploads need bucket CORS.** The portal PUTs files directly to `*.r2.cloudflarestorage.com`. If CORS is missing, the console shows *No Access-Control-Allow-Origin*.
+
+1. Set optional **`R2_CORS_ORIGINS`** in `.env` (comma-separated portal URLs), **or** rely on the dev defaults.
+2. Apply CORS on the bucket:
+
+   ```bash
+   python manage.py configure_r2_cors
+   # or: python manage.py configure_r2_cors --origins "http://localhost:8080,https://your-portal.example.com"
+   ```
+
+   Or in **Cloudflare Dashboard** → R2 → your bucket → **Settings** → **CORS policy**, allow **PUT/GET/HEAD** from your portal origin(s), headers `*`.
+
+   Example JSON is in [`core/r2-cors-policy.example.json`](core/r2-cors-policy.example.json).
 
 API runs at [http://127.0.0.1:8000/](http://127.0.0.1:8000/). Admin: `/admin/` (create a superuser with `createsuperuser` when ready).
 
@@ -65,7 +92,7 @@ Environment variables are loaded from `.env` via **django-environ** (see `.env.e
 | `catalog` | `Product` inventory |
 | `crm` | `Customer`, `CustomerOrder`, `OrderItem` |
 | `messaging` | `Thread`, `ChatMessage` |
-| `payments` | `MpesaTransaction` (Paystack-backed charges / transfers) |
+| `payments` | Historical `MpesaTransaction` ledger |
 
 ## Auth & store API (`/api/v1/`)
 
@@ -76,7 +103,9 @@ Environment variables are loaded from `.env` via **django-environ** (see `.env.e
 | POST | `/api/v1/auth/token/refresh/` | public |
 | GET | `/api/v1/auth/me/` | JWT |
 | GET/PATCH | `/api/v1/store/` | JWT (always `request.user.store`) |
-| POST | `/api/v1/store/create-subaccount/` | JWT — Paystack subaccount (idempotent) |
+| POST | `/api/v1/auth/forgot-password/` | public — emails a reset link |
+| POST | `/api/v1/auth/recover-session/` | public — `{uid, token}` checks the link |
+| POST | `/api/v1/auth/reset-password/` | public — `{uid, token, password}` sets the password |
 
 ## Catalog API (`/api/v1/`)
 
@@ -116,53 +145,14 @@ they remain visible after the migration; new products and CSV imports start as d
 | POST | `/api/v1/threads/{id}/messages/` | JWT — store-sent only (`sender=store`, does not bump unread) |
 | POST | `/api/v1/threads/{id}/mark-read/` | JWT — set `unread=0` |
 
-## Payments (Paystack Kenya)
+## Payments
 
-Settlements use **Paystack** subaccounts (`AgrovetStore.paystack_subaccount_code`).
-`MpesaTransaction` stores Paystack `reference`, optional `subaccount_code` snapshot,
-and webhook JSON (`raw_webhook`). Statuses: `pending` / `success` / `failed` / `abandoned`.
-Kinds: `charge` / `transfer`. Finalization is via `POST /api/paystack/webhook/` (HMAC verified).
+M-Pesa confirmation codes are stored on `CustomerOrder.mpesa_code`. Sending a code on
+create, or `PATCH /api/v1/orders/{id}/` with `mpesa_code`, sets `paid_at` and moves an
+`Unmatched` pickup to `Awaiting Pickup`. There is no payment-gateway charge endpoint.
 
-| Method | Path | Auth |
-|--------|------|------|
-| POST | `/api/v1/store/create-subaccount/` | JWT — creates Paystack subaccount or returns existing code |
-| POST | `/api/v1/payments/charge/` | JWT (vendor) — body `{order_id, phone}`; M-Pesa STK via Charge API |
-| POST | `/api/v1/payments/customer-charge/` | Customer JWT — same STK path; order must belong to the signed-in account |
-| GET | `/api/v1/marketplace/orders/{id}/` | Customer JWT — poll `paid_at` / `payment_status` / `mpesa_code` |
-| POST | `/api/paystack/webhook/` | Public — HMAC-SHA512 via `X-Paystack-Signature`; `charge.success` / `charge.failed` |
-
-**Test mode tip:** Paystack Kenya sandbox M-Pesa number is `+254710000000` (not a real SIM).
-Real numbers are declined with *Please use the test mobile money number…*. Sandbox often
-returns `status=success` synchronously; the charge helper then sets `paid_at` immediately
-(webhook still applies the same transition idempotently in staging/prod).
-
-On `charge.success`: mark `MpesaTransaction` success, set `CustomerOrder.paid_at`, copy
-receipt/reference onto `CustomerOrder.mpesa_code`, and if `pickup` was `Unmatched` move it
-to `Awaiting Pickup`. On `charge.failed`: mark failed and
-store gateway message. Unknown references are logged and still return 200 (avoid retry storms).
-
-`POST /payments/charge/` looks up a store-scoped order, rejects with 400 if the order
-already has a `pending` or `success` charge transaction (no second Paystack call), requires
-`paystack_subaccount_code`,
-converts `order.amount` to cents (`KES * 100`), normalizes phone to `+254…`, calls
-`PaystackClient.charge_mobile_money` (`provider=mpesa`, `bearer=subaccount`), and creates a
-`pending` `MpesaTransaction`. Response includes `reference`, `display_text`, and Paystack `data`.
-
-`POST /auth/register/` best-effort creates a Paystack subaccount for the new store (same
-defaults as create-subaccount). Paystack failures are logged and do not fail registration;
-`paystack_subaccount_code` may remain blank until `POST /store/create-subaccount/`.
-
-Defaults for create-subaccount: `settlement_bank=MPTILL`, `account_number=store.till`,
-`percentage_charge` from `PAYSTACK_DEFAULT_PERCENTAGE_CHARGE` (default **5.0** — placeholder
-marketplace commission: platform 5% / vendor ~95%). Optional body overrides:
-`settlement_bank`, `account_number`, `percentage_charge`.
-
-Client: `payments.paystack_client.PaystackClient` (raises `PaystackError` on non-2xx).
-
-Env: `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` (set locally in `.env`).
-
-> Kenya List Banks confirms **M-PESA Till** code `MPTILL` (`type=mobile_money_business`).
-> Personal M-Pesa MSISDN uses code `MPESA`. Charge STK uses `mobile_money.provider=mpesa`.
+Vendor login (`POST /api/v1/auth/token/`) is limited to 20 attempts per email per hour.
+Forgot-password and reset are limited to 10 per hour.
 
 Activate the venv first (`source .venv/bin/activate`) or call `.venv/bin/python` /
 `.venv/bin/python manage.py …`.
@@ -172,27 +162,6 @@ Activate the venv first (`source .venv/bin/activate`) or call `.venv/bin/python`
 - `AUTH_USER_MODEL = accounts.VendorUser` — email login (`USERNAME_FIELD = email`).
 - Keep `.env` out of git (listed in `backend/.gitignore`).
 
-## Deploying to Render
+## Production deploy
 
-1. Create a new **Web Service** in Render using the repository root. Choose "Docker" as the environment and set the Dockerfile path to `backend/Dockerfile` (or use the provided `render.yaml`).
-
-2. Add the following environment variables / secrets in the Render dashboard (do NOT commit them to the repo):
-	- `SECRET_KEY` — Django secret key
-	- `DATABASE_URL` — Postgres connection (use Render's managed Postgres or an external DB)
-	- `DJANGO_SETTINGS_MODULE=config.settings.prod` (can be set in `render.yaml`)
-	- `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY` (for payments)
-	- Any other service credentials (SENTRY_DSN, AWS credentials for media, etc.)
-
-3. If you use Render Postgres, create a managed Postgres instance and set `DATABASE_URL` from the database's connection string.
-
-4. Ensure static/media storage is configured. The Dockerfile runs `collectstatic` into `/app/staticfiles` and the app serves static files via the chosen production settings. For durable media, configure an external storage (S3-compatible) and set related env vars in `config.settings.prod`.
-
-5. Deploy: Render will build the Docker image, run migrations and collectstatic (the `backend/Dockerfile` already runs `manage.py migrate` and `collectstatic` at container start), and start `gunicorn` on port 8000.
-
-6. Post-deploy checks:
-	- Visit the service URL and confirm the API responds.
-	- Confirm webhooks (Paystack) are reachable from Render (set webhook URL in Paystack dashboard).
-
-7. Local testing: to simulate production locally, set `DJANGO_SETTINGS_MODULE=config.settings.prod` and ensure `.env` contains the production-like variables.
-
-If you'd like, I can also add a `Procfile`, Kubernetes manifests, or a Render cron job for periodic tasks.
+Use `backend/Dockerfile` and [`HOSTINGER_VPS_OPERATIONS.md`](../HOSTINGER_VPS_OPERATIONS.md). Set `DJANGO_SETTINGS_MODULE=config.settings.prod`, `DATABASE_URL`, `SECRET_KEY`, CORS/CSRF origins, SMTP (`EMAIL_*`, `PORTAL_ORIGIN`), and R2 vars (`backend/.env.example`).

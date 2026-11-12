@@ -1,8 +1,10 @@
+from django.test import SimpleTestCase
 from django.urls import reverse
 from django.test import SimpleTestCase
 from rest_framework.test import APITestCase
 
 from accounts.models import VendorUser
+from catalog.gallery import match_gallery_item, resolve_gallery_item
 from stores.models import AgrovetStore
 
 from .models import Product
@@ -153,8 +155,6 @@ class ProductPublicationTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], Product.Status.ARCHIVED)
         self.assertEqual(marketplace.data["results"], [])
-
-
 class GalleryMatchTests(SimpleTestCase):
 
     def test_matches_ridomil_variant_names(self):
@@ -165,7 +165,6 @@ class GalleryMatchTests(SimpleTestCase):
 
     def test_matches_milking_salve(self):
         item = match_gallery_item("Milking Salve Teat Jelly")
-
         self.assertIsNotNone(item)
         self.assertEqual(item.id, "ckl-milking-salve")
 

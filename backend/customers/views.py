@@ -75,17 +75,27 @@ def _auth_response(account: CustomerAccount, *, is_new: bool) -> Response:
 
 
 def _deliver_reset_code(email: str, code: str) -> bool:
-    """Log reset codes in DEV; wire real email later when SMTP is configured."""
+    """Email the reset code. The code is never written to the log."""
     from django.conf import settings
+    from django.core.mail import send_mail
 
-    logger.warning(
-        "Password reset code for %s: %s (ttl=%ss). Configure email delivery for production.",
-        email,
-        code,
-        _password_reset_ttl(),
-    )
-    # Always treat as delivered in API response; never echo the code to clients.
-    return bool(getattr(settings, "PASSWORD_RESET_DEV_MODE", True) or True)
+    minutes = max(_password_reset_ttl() // 60, 1)
+    try:
+        send_mail(
+            subject="Your SalamaFarm password reset code",
+            message=(
+                f"Your password reset code is {code}. "
+                f"It expires in {minutes} minutes.\n\n"
+                "If you did not ask for this, you can ignore this email."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+    except Exception:
+        logger.exception("Password reset email failed for %s", email)
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------

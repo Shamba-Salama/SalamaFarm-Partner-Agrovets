@@ -10,7 +10,6 @@ export type ApiStore = {
   attendant_phone: string;
   latitude?: number | null;
   longitude?: number | null;
-  paystack_subaccount_code?: string;
   open: boolean;
   onboarded: boolean;
   created_at?: string;
@@ -27,8 +26,6 @@ export type StoreProfile = {
   /** Optional map pin for customer Get Directions / arrival. */
   latitude: number | null;
   longitude: number | null;
-  /** Server-managed Paystack subaccount; never PATCH from the client. */
-  paystackSubaccountCode: string;
   open: boolean;
   onboarded: boolean;
 };
@@ -41,7 +38,6 @@ export const emptyStoreProfile = (): StoreProfile => ({
   attendantPhone: "",
   latitude: null,
   longitude: null,
-  paystackSubaccountCode: "",
   open: true,
   onboarded: false,
 });
@@ -55,7 +51,6 @@ export function apiStoreToProfile(store: ApiStore): StoreProfile {
     attendantPhone: store.attendant_phone ?? "",
     latitude: store.latitude ?? null,
     longitude: store.longitude ?? null,
-    paystackSubaccountCode: store.paystack_subaccount_code ?? "",
     open: Boolean(store.open),
     onboarded: Boolean(store.onboarded),
   };

@@ -27,11 +27,6 @@ class AgrovetStore(models.Model):
         blank=True,
         help_text="Store map pin — used for customer Get Directions / arrival.",
     )
-    paystack_subaccount_code = models.CharField(
-        max_length=64,
-        blank=True,
-        help_text="Paystack subaccount code for split settlements to this agrovet",
-    )
     open = models.BooleanField(default=True)
     onboarded = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)

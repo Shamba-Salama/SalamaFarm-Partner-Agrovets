@@ -1,14 +1,17 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { AuthShell } from "@/components/AuthShell";
+import { AuthCard, authFieldClass, authLabelClass } from "@/components/auth/AuthCard";
+import { AuthLoadingScreen, AuthShell } from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { formatApiError } from "@/lib/format-api-error";
 import { useAuth } from "@/lib/auth-context";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -53,30 +56,21 @@ function LoginPage() {
   };
 
   if (isBootstrapping) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-sidebar text-sm text-sidebar-foreground/80">
-        Checking session…
-      </div>
-    );
+    return <AuthLoadingScreen />;
   }
 
   return (
-    <AuthShell
-      headline="Pick up where you left off."
-      description="Manage inventory, farmer chat, and M-Pesa orders from one place."
-      footer="New here? Register your store in minutes."
-    >
-      <Card>
-        <CardContent className="space-y-4 p-5 sm:p-6">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Sign in</h1>
-            <p className="text-sm text-muted-foreground">
-              Use the email and password for your agrovet account.
-            </p>
-          </div>
-
+    <AuthShell variant="centered">
+      <AuthCard
+        title="Sign in"
+        description="Use the email and password for your agrovet account."
+        badge={{ icon: LogIn, label: "Partner sign in" }}
+      >
+        <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="login-email">Email</Label>
+            <Label htmlFor="login-email" className={authLabelClass}>
+              Email
+            </Label>
             <Input
               id="login-email"
               type="email"
@@ -84,11 +78,14 @@ function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@agrovet.co.ke"
+              className={authFieldClass}
             />
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="login-password">Password</Label>
+              <Label htmlFor="login-password" className={authLabelClass}>
+                Password
+              </Label>
               <Link
                 to="/forgot-password"
                 className="text-xs font-medium text-primary underline-offset-4 hover:underline"
@@ -96,31 +93,35 @@ function LoginPage() {
                 Forgot password?
               </Link>
             </div>
-            <Input
+            <PasswordInput
               id="login-password"
-              type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="At least 8 characters"
+              className={authFieldClass}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void onSubmit();
               }}
             />
           </div>
 
-          <Button className="w-full" disabled={!valid || submitting} onClick={() => void onSubmit()}>
+          <Button
+            className={cn("h-11 w-full rounded-lg text-sm font-semibold shadow-sm")}
+            disabled={!valid || submitting}
+            onClick={() => void onSubmit()}
+          >
             {submitting ? "Signing in…" : "Sign in"}
           </Button>
 
-          <p className="text-center text-xs text-muted-foreground">
+          <p className="text-center text-xs leading-relaxed text-muted-foreground">
             No account yet?{" "}
-            <Link to="/onboarding" className="font-medium text-primary underline-offset-4 hover:underline">
+            <Link to="/onboarding" className="font-semibold text-primary underline-offset-4 hover:underline">
               Register your agrovet
             </Link>
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </AuthCard>
     </AuthShell>
   );
 }

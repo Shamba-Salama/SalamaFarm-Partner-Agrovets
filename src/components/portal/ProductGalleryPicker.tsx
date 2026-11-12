@@ -15,9 +15,11 @@ import { cn } from "@/lib/utils";
 export function ProductGalleryPicker({
   onPick,
   pickingId,
+  disabled = false,
 }: {
   onPick: (item: GalleryItem) => void;
   pickingId: string | null;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -32,6 +34,7 @@ export function ProductGalleryPicker({
         variant="outline"
         size="sm"
         className="w-full"
+        disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >
         <Images className="mr-1.5 h-4 w-4" />
@@ -45,19 +48,31 @@ export function ProductGalleryPicker({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search gallery…"
             aria-label="Search Salama product gallery"
+            disabled={disabled}
           />
           <div className="flex flex-wrap gap-1.5">
-            <FilterChip active={category === "all"} onClick={() => setCategory("all")}>
+            <FilterChip
+              active={category === "all"}
+              onClick={() => setCategory("all")}
+              disabled={disabled}
+            >
               All
             </FilterChip>
             {CATEGORIES.map((c) => (
-              <FilterChip key={c} active={category === c} onClick={() => setCategory(c)}>
+              <FilterChip
+                key={c}
+                active={category === c}
+                onClick={() => setCategory(c)}
+                disabled={disabled}
+              >
                 {c}
               </FilterChip>
             ))}
           </div>
           {items.length === 0 ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">No gallery photos match.</p>
+            <p className="py-6 text-center text-xs text-muted-foreground">
+              No gallery photos match.
+            </p>
           ) : (
             <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto pr-0.5">
               {items.map((item) => {
@@ -66,7 +81,7 @@ export function ProductGalleryPicker({
                   <button
                     key={item.id}
                     type="button"
-                    disabled={!!pickingId}
+                    disabled={!!pickingId || disabled}
                     onClick={() => onPick(item)}
                     className={cn(
                       "overflow-hidden rounded-lg border border-border bg-muted text-left transition-colors hover:border-primary disabled:opacity-60",
@@ -74,11 +89,7 @@ export function ProductGalleryPicker({
                     )}
                     title={item.name}
                   >
-                    <img
-                      src={galleryImageSrc(item)}
-                      alt=""
-                      className="h-16 w-full object-cover"
-                    />
+                    <img src={galleryImageSrc(item)} alt="" className="h-16 w-full object-cover" />
                     <span className="block truncate px-1.5 py-1 text-[10px] font-medium leading-tight">
                       {busy ? "Applying…" : item.name}
                     </span>
@@ -97,15 +108,18 @@ function FilterChip({
   active,
   onClick,
   children,
+  disabled: chipDisabled,
 }: {
   active: boolean;
   onClick: () => void;
   children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={chipDisabled}
       className={cn(
         "rounded-full border px-2 py-0.5 text-[11px]",
         active

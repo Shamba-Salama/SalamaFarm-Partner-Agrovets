@@ -1,15 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import {
-  Archive,
-  ArrowUpDown,
-  ImagePlus,
-  Pencil,
-  Plus,
-  Search,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Archive, ArrowUpDown, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { PortalLayout } from "@/components/portal/PortalLayout";
@@ -56,8 +47,10 @@ import type { ProductWriteBody } from "@/lib/catalog-api";
 import { ApiError } from "@/lib/api-client";
 import { formatApiError } from "@/lib/format-api-error";
 import { CsvImportDialog } from "@/components/portal/CsvImportDialog";
+import { ImageUploader } from "@/components/portal/ImageUploader";
 import { ProductGalleryPicker } from "@/components/portal/ProductGalleryPicker";
 import { galleryItemToFile, type GalleryItem } from "@/lib/product-gallery";
+import { uploadImage } from "@/lib/upload-image";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/inventory")({
@@ -88,8 +81,8 @@ const emptyDraft = (): ProductWriteBody => ({
   expiry: null,
   image: "🧺",
   active: true,
-  imageFile: null,
-  existingImageUrl: null,
+  imageUrl: null,
+  imageUrlTouched: false,
 });
 
 type DrawerState =
@@ -106,8 +99,8 @@ function productToDraft(p: Product): ProductWriteBody {
     expiry: p.expiry,
     image: p.image,
     active: p.active,
-    imageFile: null,
-    existingImageUrl: p.imageUrl ?? null,
+    imageUrl: p.imageUrl ?? null,
+    imageUrlTouched: false,
   };
 }
 
@@ -462,7 +455,6 @@ function ProductDrawer({
   onSave: (draft: ProductWriteBody) => void;
 }) {
   const [draft, setDraft] = useState<ProductWriteBody | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [pickingId, setPickingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -470,57 +462,38 @@ function ProductDrawer({
     setPickingId(null);
   }, [state]);
 
-  useEffect(() => {
-    if (!draft?.imageFile) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(draft.imageFile);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [draft?.imageFile]);
-
-  const shownImage = previewUrl || draft?.existingImageUrl || null;
-
-  const onPickImage = (file: File | null) => {
-    if (!draft) return;
-    if (!file) {
-      setDraft({ ...draft, imageFile: null });
-      return;
-    }
-    const okType = ["image/jpeg", "image/jpg", "image/png"].includes(file.type);
-    if (!okType) {
-      toast.error("Please choose a JPG or PNG image.");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Image must be 5 MB or smaller.");
-      return;
-    }
-    setDraft({ ...draft, imageFile: file });
-  };
-
-  const onPickGallery = async (item: GalleryItem) => {
-    if (!draft || pickingId) return;
-    setPickingId(item.id);
-    try {
-      const file = await galleryItemToFile(item);
-      const fillEmpty = !draft.name.trim();
-      setDraft({
-        ...draft,
-        imageFile: file,
-        name: fillEmpty ? item.name : draft.name,
-        category: fillEmpty ? item.category : draft.category,
-        description: fillEmpty || !draft.description.trim() ? item.description : draft.description,
-      });
-      toast.success(`Using ${item.name} photo`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not apply gallery photo.");
-    } finally {
-      setPickingId(null);
-    }
-  };
-
+  const onPickGallery = useCallback(
+    async (item: GalleryItem) => {
+      if (!draft || saving || pickingId) return;
+      setPickingId(item.id);
+      try {
+        const file = await galleryItemToFile(item);
+        const url = await uploadImage(file);
+        const fillEmpty = !draft.name.trim();
+        setDraft({
+          ...draft,
+          imageUrl: url,
+          imageUrlTouched: true,
+          name: fillEmpty ? item.name : draft.name,
+          category: fillEmpty ? item.category : draft.category,
+          description:
+            fillEmpty || !draft.description.trim() ? item.description : draft.description,
+        });
+        toast.success(`Using ${item.name} photo`);
+      } catch (err) {
+        toast.error(
+          err instanceof ApiError
+            ? formatApiError(err)
+            : err instanceof Error
+              ? err.message
+              : "Could not use gallery photo.",
+        );
+      } finally {
+        setPickingId(null);
+      }
+    },
+    [draft, pickingId, saving],
+  );
   return (
     <Sheet open={!!state} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
@@ -597,56 +570,17 @@ function ProductDrawer({
                   }
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>Product image</Label>
-                <label className="flex cursor-pointer flex-col gap-3 rounded-xl border border-dashed border-border bg-muted/40 p-4 text-sm transition-colors hover:bg-muted">
-                  {shownImage ? (
-                    <img
-                      src={shownImage}
-                      alt="Product preview"
-                      className="mx-auto h-32 w-full max-w-xs rounded-lg object-cover"
-                    />
-                  ) : (
-                    <div className="flex items-center gap-3 text-muted-foreground">
-                      <ImagePlus className="h-5 w-5 shrink-0" />
-                      <span className="min-w-0">Upload product photo (JPG / PNG)</span>
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/jpg,.jpg,.jpeg,.png"
-                    className="hidden"
-                    onChange={(e) => onPickImage(e.target.files?.[0] ?? null)}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {draft.imageFile
-                      ? `Selected: ${draft.imageFile.name}`
-                      : shownImage
-                        ? "Tap to replace with a new JPG or PNG (max 5 MB), or pick from the Salama gallery below."
-                        : "Upload your own photo, or choose one from the Salama gallery. Farmers see this in the mobile marketplace."}
-                  </p>
-                </label>
-                <ProductGalleryPicker onPick={(item) => void onPickGallery(item)} pickingId={pickingId} />
-                {(draft.imageFile || draft.existingImageUrl) && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-fit px-0 text-muted-foreground"
-                    onClick={() =>
-                      setDraft({
-                        ...draft,
-                        imageFile: null,
-                        // Keep existing server image unless a new file was chosen;
-                        // clearing only removes the pending local file selection.
-                      })
-                    }
-                    disabled={!draft.imageFile}
-                  >
-                    {draft.imageFile ? "Clear selected photo" : null}
-                  </Button>
-                )}
-              </div>
+              <ImageUploader
+                value={draft.imageUrl}
+                onUploaded={(url) => setDraft({ ...draft, imageUrl: url, imageUrlTouched: true })}
+                onRemoved={() => setDraft({ ...draft, imageUrl: null, imageUrlTouched: true })}
+                disabled={saving}
+              />
+              <ProductGalleryPicker
+                onPick={(item) => void onPickGallery(item)}
+                pickingId={pickingId}
+                disabled={saving}
+              />
             </div>
 
             <SheetFooter className="mt-6 flex-row gap-2">
@@ -656,7 +590,7 @@ function ProductDrawer({
               <Button
                 className="flex-1"
                 onClick={() => onSave(draft)}
-                disabled={!draft.name.trim() || saving}
+                disabled={!draft.name.trim() || saving || pickingId !== null}
               >
                 {saving ? "Saving…" : "Save product"}
               </Button>

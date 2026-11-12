@@ -15,6 +15,7 @@ export type ApiProduct = {
   stock: number;
   expiry: string | null;
   image_emoji: string;
+  /** Public HTTPS URL of the product image (R2), or null if none. */
   image: string | null;
   active: boolean;
   created_at: string;
@@ -32,10 +33,13 @@ export type ProductWriteBody = {
   /** Local emoji fallback shown in the portal when no photo is present. */
   image: string;
   active: boolean;
-  /** Optional JPG/PNG chosen in the product drawer — sent as multipart `image`. */
-  imageFile?: File | null;
-  /** Existing photo URL from the API (edit mode preview only). */
-  existingImageUrl?: string | null;
+  /** Public image URL after direct upload to R2 (stored as `image` on the API). */
+  imageUrl: string | null;
+  /**
+   * On edit, PATCH omits `image` unless the user changed the photo in this session,
+   * so other fields can be saved without clearing an existing URL.
+   */
+  imageUrlTouched?: boolean;
 };
 
 export type CsvImportResult = {
@@ -59,7 +63,7 @@ export function apiProductToProduct(p: ApiProduct) {
   };
 }
 
-export function productToApiBody(p: ProductWriteBody): Record<string, unknown> {
+export function productToApiCreateBody(p: ProductWriteBody): Record<string, unknown> {
   const expiry = p.expiry && String(p.expiry).trim() ? String(p.expiry).trim() : null;
   return {
     name: p.name,
@@ -70,27 +74,17 @@ export function productToApiBody(p: ProductWriteBody): Record<string, unknown> {
     expiry,
     image_emoji: p.image,
     active: p.active,
+    image: p.imageUrl?.trim() || null,
   };
 }
 
-function productToFormData(p: ProductWriteBody): FormData {
-  const form = new FormData();
-  const body = productToApiBody(p);
-  for (const [key, value] of Object.entries(body)) {
-    if (value === null || value === undefined) {
-      // Omit nulls (e.g. empty expiry) — multipart cannot send JSON null cleanly.
-      continue;
-    }
-    if (typeof value === "boolean") {
-      form.append(key, value ? "true" : "false");
-    } else {
-      form.append(key, String(value));
-    }
+export function productToApiPatchBody(p: ProductWriteBody): Record<string, unknown> {
+  const base = productToApiCreateBody(p);
+  if (!p.imageUrlTouched) {
+    const { image: _i, ...rest } = base;
+    return rest;
   }
-  if (p.imageFile) {
-    form.append("image", p.imageFile, p.imageFile.name);
-  }
-  return form;
+  return base;
 }
 
 function unwrapProductList(data: unknown): ApiProduct[] {
@@ -107,17 +101,11 @@ export async function fetchProducts(): Promise<ApiProduct[]> {
 }
 
 export async function createProduct(p: ProductWriteBody): Promise<ApiProduct> {
-  if (p.imageFile) {
-    return api.post<ApiProduct>("/products/", productToFormData(p));
-  }
-  return api.post<ApiProduct>("/products/", productToApiBody(p));
+  return api.post<ApiProduct>("/products/", productToApiCreateBody(p));
 }
 
 export async function updateProduct(id: string | number, p: ProductWriteBody): Promise<ApiProduct> {
-  if (p.imageFile) {
-    return api.patch<ApiProduct>(`/products/${id}/`, productToFormData(p));
-  }
-  return api.patch<ApiProduct>(`/products/${id}/`, productToApiBody(p));
+  return api.patch<ApiProduct>(`/products/${id}/`, productToApiPatchBody(p));
 }
 
 export async function deleteProductApi(id: string | number): Promise<void> {
