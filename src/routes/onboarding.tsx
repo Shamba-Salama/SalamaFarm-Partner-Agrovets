@@ -213,7 +213,10 @@ function OnboardingPage() {
           </Button>
           <p className="text-center text-xs leading-relaxed text-muted-foreground">
             Already registered?{" "}
-            <Link to="/login" className="font-semibold text-primary underline-offset-4 hover:underline">
+            <Link
+              to="/login"
+              className="font-semibold text-primary underline-offset-4 hover:underline"
+            >
               Sign in
             </Link>
           </p>
@@ -228,10 +231,10 @@ function OnboardingPage() {
 
 function AuthSection({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-2 pt-1">
-      <span className="h-px flex-1 bg-gradient-to-r from-primary/25 to-transparent" aria-hidden />
-      <span className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">{title}</span>
-      <span className="h-px flex-1 bg-gradient-to-l from-primary/25 to-transparent" aria-hidden />
+    <div className="pt-1">
+      <span className="text-[11px] font-semibold tracking-wider text-primary uppercase">
+        {title}
+      </span>
     </div>
   );
 }
@@ -246,7 +249,9 @@ function CountryField() {
         className={cn(authFieldClass, "bg-muted/80 text-muted-foreground")}
         aria-readonly
       />
-      <p className="text-xs text-muted-foreground">SalamaFarm Partner currently onboards stores in Kenya only.</p>
+      <p className="text-xs text-muted-foreground">
+        SalamaFarm Partner currently onboards stores in Kenya only.
+      </p>
     </div>
   );
 }

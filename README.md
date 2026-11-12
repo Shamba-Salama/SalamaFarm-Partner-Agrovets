@@ -90,7 +90,11 @@ Open the URL Vite prints (often `http://localhost:8080`).
 | `npm run preview` | Preview production build |
 | `npm run lint` | ESLint |
 
-The frontend talks to `http://127.0.0.1:8000/api/v1` by default (`VITE_API_BASE_URL` can override).
+The frontend uses the same-origin `/api/v1` proxy by default. Local Vite development and
+Vercel builds proxy to the Django API at `https://api-next.salamafarm.com`. To use a local
+Django backend instead, set `DJANGO_API_ORIGIN=http://127.0.0.1:8000` before starting Vite.
+For static frontend hosting, set `VITE_API_BASE_URL` to
+`https://api-next.salamafarm.com/api/v1`.
 
 ## Features
 

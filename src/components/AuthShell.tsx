@@ -35,24 +35,18 @@ const HIGHLIGHTS: { icon: LucideIcon; title: string; text: string }[] = [
 
 function AuthBackdrop() {
   return (
-  <>
-      <div
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(168deg,oklch(0.98_0.012_95)_0%,oklch(0.985_0.006_115)_42%,oklch(0.965_0.022_152)_100%)]"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-60 bg-[radial-gradient(ellipse_80%_50%_at_10%_90%,oklch(0.55_0.09_152/0.14),transparent),radial-gradient(ellipse_60%_40%_at_95%_10%,oklch(0.72_0.11_75/0.1),transparent)]"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.07] bg-[repeating-linear-gradient(115deg,oklch(0.36_0.075_152)_0_1px,transparent_1px_18px)]"
-        aria-hidden
-      />
+    <>
+      <div className="auth-backdrop-base pointer-events-none absolute inset-0" aria-hidden />
+      <div className="auth-backdrop-glow pointer-events-none absolute inset-0" aria-hidden />
     </>
   );
 }
 
-function FieldPanel({ headline, description, footer }: Pick<AuthShellProps, "headline" | "description" | "footer">) {
+function FieldPanel({
+  headline,
+  description,
+  footer,
+}: Pick<AuthShellProps, "headline" | "description" | "footer">) {
   return (
     <div className="relative flex min-h-full flex-col justify-between overflow-hidden p-8 lg:p-12 xl:p-14">
       <div
@@ -84,7 +78,10 @@ function FieldPanel({ headline, description, footer }: Pick<AuthShellProps, "hea
 
         <ul className="hidden max-w-md space-y-4 lg:block">
           {HIGHLIGHTS.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3.5 backdrop-blur-sm">
+            <li
+              key={title}
+              className="flex gap-3 rounded-xl border border-white/10 bg-white/5 p-3.5 backdrop-blur-sm"
+            >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/12 text-sidebar-foreground">
                 <Icon className="h-4 w-4" aria-hidden />
               </span>
@@ -118,7 +115,12 @@ function CenteredAuthLayout({
       </div>
       <div className={cn("w-full max-w-[26rem]", contentClassName)}>{children}</div>
       {footer ? (
-        <p className={cn("mt-6 max-w-[26rem] text-center text-xs text-muted-foreground", contentClassName)}>
+        <p
+          className={cn(
+            "mt-6 max-w-[26rem] text-center text-xs text-muted-foreground",
+            contentClassName,
+          )}
+        >
           {footer}
         </p>
       ) : null}
@@ -144,35 +146,30 @@ export function AuthShell({
           {children}
         </CenteredAuthLayout>
       ) : (
-      <div className="relative grid min-h-svh lg:grid-cols-2">
-        <aside
-          className={cn(
-            "relative border-b border-primary/10 lg:border-b-0 lg:border-r",
-            "bg-gradient-to-br from-sidebar via-primary to-sidebar lg:min-h-svh",
-          )}
-        >
-          <div className="lg:hidden">
-            <MobileHero headline={headline} description={description} />
-          </div>
-          <div className="hidden lg:block lg:min-h-svh">
-            <FieldPanel headline={headline} description={description} footer={footer} />
-          </div>
-        </aside>
+        <div className="relative grid min-h-svh lg:grid-cols-2">
+          <aside className={cn("relative bg-primary lg:min-h-svh")}>
+            <div className="lg:hidden">
+              <MobileHero headline={headline} description={description} />
+            </div>
+            <div className="hidden lg:block lg:min-h-svh">
+              <FieldPanel headline={headline} description={description} footer={footer} />
+            </div>
+          </aside>
 
-        <main className="flex flex-col justify-start px-4 py-6 sm:px-8 sm:py-8 md:justify-center md:py-12 lg:min-h-svh lg:px-10 xl:px-14">
-          <div className={cn("mx-auto w-full max-w-[26rem]", contentClassName)}>{children}</div>
-          {footer ? (
-            <p
-              className={cn(
-                "mx-auto mt-6 max-w-[26rem] text-center text-xs text-muted-foreground lg:hidden",
-                contentClassName,
-              )}
-            >
-              {footer}
-            </p>
-          ) : null}
-        </main>
-      </div>
+          <main className="flex flex-col justify-start px-4 py-6 sm:px-8 sm:py-8 md:justify-center md:py-12 lg:min-h-svh lg:px-10 xl:px-14">
+            <div className={cn("mx-auto w-full max-w-[26rem]", contentClassName)}>{children}</div>
+            {footer ? (
+              <p
+                className={cn(
+                  "mx-auto mt-6 max-w-[26rem] text-center text-xs text-muted-foreground lg:hidden",
+                  contentClassName,
+                )}
+              >
+                {footer}
+              </p>
+            ) : null}
+          </main>
+        </div>
       )}
     </div>
   );
@@ -185,7 +182,9 @@ function MobileHero({ headline, description }: Pick<AuthShellProps, "headline" |
         <BrandLogo tone="sidebar" showPartnerLabel markClassName="h-14" />
       </div>
       <h2 className="text-center text-lg font-semibold leading-snug tracking-tight">{headline}</h2>
-      <p className="mx-auto mt-2 max-w-sm text-center text-sm text-sidebar-foreground/75">{description}</p>
+      <p className="mx-auto mt-2 max-w-sm text-center text-sm text-sidebar-foreground/75">
+        {description}
+      </p>
     </div>
   );
 }

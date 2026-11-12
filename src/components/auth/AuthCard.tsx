@@ -17,14 +17,10 @@ export function AuthCard({ title, description, badge, children, className }: Aut
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-primary/12 bg-card/95 shadow-[0_12px_40px_-12px_oklch(0.22_0.04_152/0.18)] backdrop-blur-sm",
+        "relative overflow-hidden rounded-2xl border border-white/75 bg-card/60 shadow-[0_20px_60px_-24px_color-mix(in_oklch,var(--primary)_30%,transparent)] backdrop-blur-xl",
         className,
       )}
     >
-      <div
-        className="h-1 w-full bg-gradient-to-r from-primary via-success to-primary/50"
-        aria-hidden
-      />
       <div className="space-y-5 p-6 sm:p-8">
         <div className="space-y-2">
           {badge && BadgeIcon ? (
@@ -44,6 +40,6 @@ export function AuthCard({ title, description, badge, children, className }: Aut
 
 /** Shared field chrome for auth forms — calm, roomy, farm-market friendly. */
 export const authFieldClass =
-  "h-10 rounded-lg border-border/70 bg-background shadow-none transition-[border-color,box-shadow] focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary/15";
+  "h-10 rounded-lg border-primary/15 bg-background/60 shadow-none backdrop-blur-md transition-[border-color,box-shadow] focus-visible:border-primary/45 focus-visible:ring-2 focus-visible:ring-primary/15";
 
 export const authLabelClass = "text-[13px] font-medium text-foreground/90";
