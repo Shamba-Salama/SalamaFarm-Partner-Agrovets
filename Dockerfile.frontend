@@ -11,7 +11,7 @@ FROM node:22-slim AS build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --no-audit
+RUN rm -f package-lock.json && npm install --no-audit
 
 COPY . .
 

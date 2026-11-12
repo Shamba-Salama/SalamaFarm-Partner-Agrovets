@@ -40,9 +40,6 @@ export default defineConfig({
   // Do not set ssr.optimizeDeps.include for @tanstack/* — pre-bundling can resolve a second
   // copy of react and break SSR with "Invalid hook call" / useContext on null.
   vite: {
-    resolve: {
-      dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
-    },
     server: {
       // Lovable defaults to host `::`; on Windows, HMR WebSockets often fail when the tab uses localhost.
       host: "127.0.0.1",
@@ -59,6 +56,9 @@ export default defineConfig({
           secure: true,
         },
       },
+    },
+    resolve: {
+      dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
     },
   },
   nitro: nitroConfig(),
